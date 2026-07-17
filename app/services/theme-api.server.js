@@ -30,6 +30,18 @@ function assertNoUserErrors(userErrors, operationName) {
   throw new Error(`${operationName} failed: ${message}`);
 }
 
+function assertNoFileReadErrors(userErrors, operationName) {
+  if (!userErrors?.length) return;
+
+  const message = userErrors
+    .map(({ code, filename }) =>
+      filename ? `${filename}: ${code}` : code,
+    )
+    .join("; ");
+
+  throw new Error(`${operationName} failed: ${message}`);
+}
+
 /**
  * Find the currently published theme. Pass the `admin` client returned by
  * `await authenticate.admin(request)`.
@@ -72,8 +84,8 @@ export async function getThemeLiquid(admin, themeId) {
               }
             }
             userErrors {
+              code
               filename
-              message
             }
           }
         }
@@ -90,7 +102,10 @@ export async function getThemeLiquid(admin, themeId) {
   const data = await getGraphqlData(response, "Fetching theme.liquid");
   if (!data.theme) throw new Error("The published theme no longer exists.");
 
-  assertNoUserErrors(data.theme.files?.userErrors, "Fetching theme.liquid");
+  assertNoFileReadErrors(
+    data.theme.files?.userErrors,
+    "Fetching theme.liquid",
+  );
 
   const file = data.theme.files?.nodes?.find(
     ({ filename }) => filename === THEME_LIQUID_FILENAME,

@@ -78,3 +78,20 @@ CREATE INDEX "CleanOperation_shop_createdAt_idx" ON "CleanOperation"("shop", "cr
 
 -- CreateIndex
 CREATE INDEX "AuditEvent_shop_createdAt_idx" ON "AuditEvent"("shop", "createdAt");
+
+-- CreateTable
+CREATE TABLE "IgnoredFinding" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "shop" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "appName" TEXT NOT NULL,
+    "codeHash" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "IgnoredFinding_shop_fkey" FOREIGN KEY ("shop") REFERENCES "Shop" ("shop") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "IgnoredFinding_shop_filename_appName_codeHash_key" ON "IgnoredFinding"("shop", "filename", "appName", "codeHash");
+
+-- CreateIndex
+CREATE INDEX "IgnoredFinding_shop_idx" ON "IgnoredFinding"("shop");

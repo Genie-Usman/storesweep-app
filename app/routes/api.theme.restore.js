@@ -2,6 +2,10 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { runRestore, RestoreError } from "../services/restore-run.server";
 import {
+  getSubscriptionStatus,
+  isBillingEnabled,
+} from "../services/billing.server";
+import {
   enforceRateLimit,
   errorResponse,
   jsonResponse,
@@ -14,7 +18,7 @@ import {
 import { logger } from "../utils/logger.server";
 
 export const action = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   if (request.method !== "POST") {
@@ -23,6 +27,15 @@ export const action = async ({ request }) => {
 
   const limited = enforceRateLimit("restore", shop);
   if (limited) return limited;
+
+  const subscription = await getSubscriptionStatus(billing);
+  if (isBillingEnabled() && !subscription.subscribed) {
+    return errorResponse(
+      "A StoreSweep Pro subscription is required to restore theme files.",
+      402,
+      { code: "UPGRADE_REQUIRED", billingUrl: "/app/billing" },
+    );
+  }
 
   const parsed = await readJsonBody(request);
   if (parsed.error) return errorResponse(parsed.error);

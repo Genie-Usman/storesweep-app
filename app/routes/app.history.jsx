@@ -1,4 +1,6 @@
-import { useLoaderData } from "react-router";
+import { useEffect } from "react";
+import { useFetcher, useLoaderData, useRevalidator } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { authenticate } from "../shopify.server";
@@ -79,6 +81,39 @@ function statusLabel(status) {
 
 export default function StoreSweepHistory() {
   const { scans, cleanOperations } = useLoaderData();
+  const restoreFetcher = useFetcher();
+  const revalidator = useRevalidator();
+  const shopify = useAppBridge();
+  const isRestoring = restoreFetcher.state !== "idle";
+
+  useEffect(() => {
+    if (!restoreFetcher.data) return;
+
+    if (restoreFetcher.data.success) {
+      shopify.toast.show(
+        `${restoreFetcher.data.restoredFiles.length} ${
+          restoreFetcher.data.restoredFiles.length === 1 ? "file" : "files"
+        } restored from backup.`,
+      );
+      revalidator.revalidate();
+    } else {
+      shopify.toast.show(
+        restoreFetcher.data.error || "Restore failed.",
+        { isError: true },
+      );
+    }
+  }, [restoreFetcher.data, revalidator, shopify]);
+
+  const restoreOperation = (operation) => {
+    restoreFetcher.submit(
+      { cleanOperationId: operation.id },
+      {
+        method: "POST",
+        action: "/api/theme/restore",
+        encType: "application/json",
+      },
+    );
+  };
 
   return (
     <s-page heading="History">
@@ -149,6 +184,21 @@ export default function StoreSweepHistory() {
                     {operation.removedCount} blocks across{" "}
                     {operation.filesChanged}{" "}
                     {operation.filesChanged === 1 ? "file" : "files"}
+                    {operation.status === "completed" && (
+                      <s-stack direction="block" gap="tight">
+                        <s-button
+                          disabled={isRestoring}
+                          {...(restoreFetcher.state !== "idle" &&
+                          restoreFetcher.json?.cleanOperationId ===
+                            operation.id
+                            ? { loading: true }
+                            : {})}
+                          onClick={() => restoreOperation(operation)}
+                        >
+                          Restore
+                        </s-button>
+                      </s-stack>
+                    )}
                   </s-table-cell>
                 </s-table-row>
               ))}

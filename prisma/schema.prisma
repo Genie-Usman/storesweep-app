@@ -46,6 +46,7 @@ model Shop {
   scans         Scan[]
   cleanOperations CleanOperation[]
   auditEvents   AuditEvent[]
+  ignoredFindings IgnoredFinding[]
 }
 
 /// One completed scan of the store's published theme.
@@ -115,4 +116,20 @@ model AuditEvent {
   shopRef   Shop?    @relation(fields: [shop], references: [shop])
 
   @@index([shop, createdAt])
+}
+
+/// Matches a merchant marked as intentional so scans stop surfacing them.
+/// Identity is (filename, appName, hash of the exact matched code), so a
+/// finding stays ignored across unrelated edits to the file.
+model IgnoredFinding {
+  id        String   @id @default(cuid())
+  shop      String
+  filename  String
+  appName   String
+  codeHash  String
+  createdAt DateTime @default(now())
+  shopRef   Shop?    @relation(fields: [shop], references: [shop])
+
+  @@unique([shop, filename, appName, codeHash])
+  @@index([shop])
 }

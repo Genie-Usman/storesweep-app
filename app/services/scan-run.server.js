@@ -1,6 +1,10 @@
 import { getMainTheme, listThemeTextFiles } from "./theme-api.server.js";
 import { scanThemeFile } from "../utils/scanner.js";
-import { identifyFindings } from "../utils/findings.js";
+import {
+  identifyFindings,
+  ignoredFindingKey,
+  ignoredFindingRecordKey,
+} from "../utils/findings.js";
 import { contentChecksum } from "../utils/checksum.js";
 import { recordAudit, touchShop } from "./audit.server.js";
 import { logger } from "../utils/logger.server.js";
@@ -16,6 +20,14 @@ export async function runScan({ admin, db, shop }) {
 
   const fileChecksums = {};
   const findings = [];
+  let ignoredCount = 0;
+
+  const ignoredRecords = await db.ignoredFinding.findMany({ where: { shop } });
+  const ignoredKeys = new Set(
+    ignoredRecords.map((record) =>
+      ignoredFindingRecordKey(record),
+    ),
+  );
 
   for (const { filename, content } of files) {
     fileChecksums[filename] = contentChecksum(content);
@@ -24,6 +36,20 @@ export async function runScan({ admin, db, shop }) {
       filename,
     }));
     for (const finding of identifyFindings(fileFindings)) {
+      if (
+        ignoredKeys.has(
+          ignoredFindingRecordKey(
+            ignoredFindingKey({
+              filename: finding.filename,
+              appName: finding.appName,
+              matchedCode: finding.matchedCode,
+            }),
+          ),
+        )
+      ) {
+        ignoredCount += 1;
+        continue;
+      }
       findings.push(finding);
     }
   }
@@ -89,6 +115,7 @@ export async function runScan({ admin, db, shop }) {
     themeName: theme.name ?? null,
     fileCount: files.length,
     findingCount: findings.length,
+    ignoredCount,
     findings,
     fileChecksums,
     durationMs,

@@ -2,6 +2,7 @@ const DEFAULT_RULES = Object.freeze({
   scan: { limit: 10, windowMs: 60_000 },
   clean: { limit: 5, windowMs: 60_000 },
   restore: { limit: 5, windowMs: 60_000 },
+  ignore: { limit: 30, windowMs: 60_000 },
 });
 
 /**

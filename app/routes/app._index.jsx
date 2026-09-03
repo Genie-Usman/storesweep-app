@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { getSubscriptionStatus } from "../services/billing.server";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -13,22 +14,29 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [lastScan, lastClean] = await Promise.all([
-    db.scan.findFirst({
-      where: { shop, status: "completed" },
-      orderBy: { createdAt: "desc" },
-      include: {
-        findings: { orderBy: [{ filename: "asc" }, { startLine: "asc" }] },
-      },
-    }),
-    db.cleanOperation.findFirst({
-      where: { shop, status: "completed" },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const [lastScan, lastClean, ignoredFindings, subscription] =
+    await Promise.all([
+      db.scan.findFirst({
+        where: { shop, status: "completed" },
+        orderBy: { createdAt: "desc" },
+        include: {
+          findings: { orderBy: [{ filename: "asc" }, { startLine: "asc" }] },
+        },
+      }),
+      db.cleanOperation.findFirst({
+        where: { shop, status: "completed" },
+        orderBy: { createdAt: "desc" },
+      }),
+      db.ignoredFinding.findMany({
+        where: { shop },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      getSubscriptionStatus(billing),
+    ]);
 
   return {
     lastScan:
@@ -60,6 +68,12 @@ export const loader = async ({ request }) => {
             removedCount: lastClean.removedCount,
             filesChanged: lastClean.filesChanged,
           },
+    ignoredFindings: ignoredFindings.map((record) => ({
+      id: record.id,
+      filename: record.filename,
+      appName: record.appName,
+    })),
+    billing: subscription,
   };
 };
 
@@ -88,34 +102,39 @@ function confidenceLabel(confidence) {
 }
 
 export default function StoreSweepDashboard() {
-  const { lastScan: initialScan, lastClean } = useLoaderData();
+  const loaderData = useLoaderData();
+  const { lastClean, ignoredFindings, billing } = loaderData;
   const scanFetcher = useFetcher();
   const cleanFetcher = useFetcher();
   const restoreFetcher = useFetcher();
+  const ignoreFetcher = useFetcher();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
 
   const [scanResult, setScanResult] = useState(
-    initialScan
+    loaderData.lastScan
       ? {
-          scanId: initialScan.scanId,
-          themeName: initialScan.themeName,
-          createdAtLabel: initialScan.createdAtLabel,
-          fileCount: initialScan.fileCount,
-          findingCount: initialScan.findingCount,
-          fileChecksums: initialScan.fileChecksums,
-          findings: initialScan.findings,
+          scanId: loaderData.lastScan.scanId,
+          themeName: loaderData.lastScan.themeName,
+          createdAtLabel: loaderData.lastScan.createdAtLabel,
+          fileCount: loaderData.lastScan.fileCount,
+          findingCount: loaderData.lastScan.findingCount,
+          fileChecksums: loaderData.lastScan.fileChecksums,
+          findings: loaderData.lastScan.findings,
         }
       : null,
   );
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [writeAccessRequired, setWriteAccessRequired] = useState(null);
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
 
   const isScanning = scanFetcher.state !== "idle";
   const isCleaning = cleanFetcher.state !== "idle";
   const isRestoring = restoreFetcher.state !== "idle";
-  const isBusy = isScanning || isCleaning || isRestoring;
+  const isIgnoring = ignoreFetcher.state !== "idle";
+  const isBusy = isScanning || isCleaning || isRestoring || isIgnoring;
+  const needsUpgrade = billing.enabled && !billing.subscribed;
 
   const findings = useMemo(() => scanResult?.findings || [], [scanResult]);
   const findingsByFile = useMemo(() => {
@@ -156,6 +175,7 @@ export default function StoreSweepDashboard() {
       setSelectedIds(new Set());
       setErrorMessage("");
       setWriteAccessRequired(null);
+      setUpgradeRequired(false);
       revalidator.revalidate();
       scanFetcher.load("/api/theme/scan");
     } else if (cleanFetcher.data.code === "THEME_WRITE_ACCESS_REQUIRED") {
@@ -163,6 +183,9 @@ export default function StoreSweepDashboard() {
         message: cleanFetcher.data.error,
         helpUrl: cleanFetcher.data.helpUrl,
       });
+      setErrorMessage("");
+    } else if (cleanFetcher.data.code === "UPGRADE_REQUIRED") {
+      setUpgradeRequired(true);
       setErrorMessage("");
     } else {
       setErrorMessage(cleanFetcher.data.error || "Theme cleaning failed.");
@@ -185,6 +208,16 @@ export default function StoreSweepDashboard() {
       setErrorMessage(restoreFetcher.data.error || "Restore failed.");
     }
   }, [restoreFetcher.data, scanFetcher, shopify, revalidator]);
+
+  useEffect(() => {
+    if (!ignoreFetcher.data) return;
+
+    if (ignoreFetcher.data.success) {
+      revalidator.revalidate();
+    } else {
+      setErrorMessage(ignoreFetcher.data.error || "The ignore list change failed.");
+    }
+  }, [ignoreFetcher.data, revalidator]);
 
   const scanTheme = () => {
     setErrorMessage("");
@@ -237,6 +270,53 @@ export default function StoreSweepDashboard() {
     );
   };
 
+  const ignoreFinding = (finding) => {
+    setErrorMessage("");
+    ignoreFetcher.submit(
+      {
+        intent: "ignore",
+        finding: {
+          filename: finding.filename,
+          appName: finding.appName,
+          matchedCode: finding.matchedCode,
+        },
+      },
+      {
+        method: "POST",
+        action: "/api/findings/ignore",
+        encType: "application/json",
+      },
+    );
+    // Hide the row immediately; the server filter catches up on the next scan.
+    setScanResult((current) =>
+      current
+        ? {
+            ...current,
+            findings: current.findings.filter(
+              (candidate) => candidate.id !== finding.id,
+            ),
+          }
+        : current,
+    );
+    setSelectedIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(finding.id);
+      return nextIds;
+    });
+  };
+
+  const unignoreFinding = (record) => {
+    setErrorMessage("");
+    ignoreFetcher.submit(
+      { intent: "unignore", id: record.id },
+      {
+        method: "POST",
+        action: "/api/findings/ignore",
+        encType: "application/json",
+      },
+    );
+  };
+
   return (
     <s-page heading="StoreSweep">
       <s-button
@@ -260,6 +340,26 @@ export default function StoreSweepDashboard() {
           </s-paragraph>
         </s-stack>
       </s-section>
+
+      {needsUpgrade && (
+        <s-banner heading="Cleaning requires StoreSweep Pro" tone="info">
+          <s-paragraph>
+            Scanning is free. Cleaning and restoring theme files require a
+            StoreSweep Pro subscription.
+          </s-paragraph>
+          <s-link href="/app/billing">Upgrade to Pro</s-link>
+        </s-banner>
+      )}
+
+      {upgradeRequired && !needsUpgrade && (
+        <s-banner heading="Cleaning requires StoreSweep Pro" tone="warning">
+          <s-paragraph>
+            Your subscription is not active yet. Complete the Shopify
+            subscription approval to start cleaning.
+          </s-paragraph>
+          <s-link href="/app/billing">Start Pro subscription</s-link>
+        </s-banner>
+      )}
 
       {errorMessage && (
         <s-banner heading="StoreSweep needs your attention" tone="critical">
@@ -315,6 +415,9 @@ export default function StoreSweepDashboard() {
                 ? `Theme: ${scanResult.themeName}. `
                 : ""}
               {scanResult.fileCount} files checked.
+              {scanResult.ignoredCount > 0
+                ? ` ${scanResult.ignoredCount} matches hidden per your ignore list.`
+                : ""}
             </s-paragraph>
             {findings.length === 0 ? (
               <s-banner
@@ -384,6 +487,12 @@ export default function StoreSweepDashboard() {
                         <s-paragraph>
                           {confidenceLabel(finding.confidence)}
                         </s-paragraph>
+                        <s-button
+                          disabled={isBusy}
+                          onClick={() => ignoreFinding(finding)}
+                        >
+                          Keep this code
+                        </s-button>
                       </s-stack>
                     </s-table-cell>
                     <s-table-cell>
@@ -414,7 +523,12 @@ export default function StoreSweepDashboard() {
               <s-button
                 variant="primary"
                 tone="critical"
-                disabled={selectedIds.size === 0 || isBusy}
+                disabled={
+                  selectedIds.size === 0 ||
+                  isBusy ||
+                  needsUpgrade ||
+                  upgradeRequired
+                }
                 onClick={cleanSelectedCode}
                 {...(isCleaning ? { loading: true } : {})}
               >
@@ -446,7 +560,7 @@ export default function StoreSweepDashboard() {
             <s-stack direction="inline" gap="base">
               <s-button
                 onClick={restoreLastClean}
-                disabled={isBusy}
+                disabled={isBusy || needsUpgrade || upgradeRequired}
                 {...(isRestoring ? { loading: true } : {})}
               >
                 Restore last cleaning run
@@ -457,6 +571,37 @@ export default function StoreSweepDashboard() {
               </s-paragraph>
             </s-stack>
           </s-stack>
+        </s-section>
+      )}
+
+      {ignoredFindings.length > 0 && (
+        <s-section
+          heading={`Ignored findings (${ignoredFindings.length})`}
+          padding="none"
+        >
+          <s-table>
+            <s-table-header-row>
+              <s-table-header listSlot="primary">App or block</s-table-header>
+              <s-table-header listSlot="inline">File</s-table-header>
+              <s-table-header listSlot="secondary"> </s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {ignoredFindings.map((record) => (
+                <s-table-row key={record.id}>
+                  <s-table-cell>{record.appName}</s-table-cell>
+                  <s-table-cell>{record.filename}</s-table-cell>
+                  <s-table-cell>
+                    <s-button
+                      disabled={isBusy}
+                      onClick={() => unignoreFinding(record)}
+                    >
+                      Stop ignoring
+                    </s-button>
+                  </s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
         </s-section>
       )}
     </s-page>

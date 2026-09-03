@@ -39,9 +39,54 @@ export function originalFilenameForBackup(backupFilename) {
   return `${directory}${stem}${extension}`;
 }
 
-async function getGraphqlData(response, operationName) {
-  const payload = await response.json();
+const RETRYABLE_MAX_ATTEMPTS = 4;
+const RETRYABLE_BASE_DELAY_MS = 500;
 
+const delay = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function isThrottledPayload(payload, status) {
+  return (
+    status === 429 ||
+    Boolean(
+      payload?.errors?.some(
+        (error) => error.extensions?.code === "THROTTLED",
+      ),
+    )
+  );
+}
+
+/**
+ * Run an Admin GraphQL call, retrying Shopify cost throttling with
+ * exponential backoff. Large-theme scans issue many queries in sequence
+ * and would otherwise fail midway on a busy store.
+ */
+export async function graphqlWithRetry(
+  admin,
+  query,
+  options,
+  { maxAttempts = RETRYABLE_MAX_ATTEMPTS, backoffMs = RETRYABLE_BASE_DELAY_MS, wait = delay } = {},
+) {
+  let attempt = 0;
+
+  for (;;) {
+    const response = await admin.graphql(query, options);
+    const payload = await response.json();
+
+    if (
+      isThrottledPayload(payload, response.status) &&
+      attempt < maxAttempts - 1
+    ) {
+      attempt += 1;
+      await wait(backoffMs * 2 ** (attempt - 1));
+      continue;
+    }
+
+    return payload;
+  }
+}
+
+function getGraphqlData(payload, operationName) {
   if (payload.errors?.length) {
     const message = payload.errors.map((error) => error.message).join("; ");
     throw new Error(`${operationName} failed: ${message}`);
@@ -88,7 +133,8 @@ export async function getMainThemeId(admin) {
 }
 
 export async function getMainTheme(admin) {
-  const response = await admin.graphql(`#graphql
+  const data = await getGraphqlData(
+    await graphqlWithRetry(admin, `#graphql
     query StoreSweepMainTheme {
       themes(first: 1, roles: [MAIN]) {
         nodes {
@@ -97,9 +143,9 @@ export async function getMainTheme(admin) {
         }
       }
     }
-  `);
-
-  const data = await getGraphqlData(response, "Fetching the live theme");
+  `),
+    "Fetching the live theme",
+  );
   const theme = data.themes?.nodes?.[0];
 
   if (!theme?.id) {
@@ -114,8 +160,10 @@ export async function getMainTheme(admin) {
  * exist or is not stored as text.
  */
 export async function getThemeTextFile(admin, themeId, filename) {
-  const response = await admin.graphql(
-    `#graphql
+  const data = await getGraphqlData(
+    await graphqlWithRetry(
+      admin,
+      `#graphql
       query StoreSweepThemeFile($themeId: ID!, $filenames: [String!]!) {
         theme(id: $themeId) {
           files(first: 1, filenames: $filenames) {
@@ -135,15 +183,15 @@ export async function getThemeTextFile(admin, themeId, filename) {
         }
       }
     `,
-    {
-      variables: {
-        themeId,
-        filenames: [filename],
+      {
+        variables: {
+          themeId,
+          filenames: [filename],
+        },
       },
-    },
+    ),
+    `Fetching ${filename}`,
   );
-
-  const data = await getGraphqlData(response, `Fetching ${filename}`);
   if (!data.theme) throw new Error("The published theme no longer exists.");
 
   assertNoFileReadErrors(
@@ -197,8 +245,10 @@ export async function listThemeTextFiles(
       );
     }
 
-    const response = await admin.graphql(
-      `#graphql
+    const data = await getGraphqlData(
+      await graphqlWithRetry(
+        admin,
+        `#graphql
         query StoreSweepThemeFiles($themeId: ID!, $first: Int!, $after: String) {
           theme(id: $themeId) {
             files(first: $first, after: $after) {
@@ -222,12 +272,12 @@ export async function listThemeTextFiles(
           }
         }
       `,
-      {
-        variables: { themeId, first: pageSize, after },
-      },
+        {
+          variables: { themeId, first: pageSize, after },
+        },
+      ),
+      "Listing theme files",
     );
-
-    const data = await getGraphqlData(response, "Listing theme files");
     if (!data.theme) throw new Error("The published theme no longer exists.");
 
     assertNoFileReadErrors(
@@ -258,8 +308,10 @@ async function upsertThemeTextFile(admin, themeId, filename, content) {
     throw new TypeError("Theme file content must be a string.");
   }
 
-  const response = await admin.graphql(
-    `#graphql
+  const data = await getGraphqlData(
+    await graphqlWithRetry(
+      admin,
+      `#graphql
       mutation StoreSweepUpsertThemeFile(
         $themeId: ID!
         $files: [OnlineStoreThemeFilesUpsertFileInput!]!
@@ -278,20 +330,20 @@ async function upsertThemeTextFile(admin, themeId, filename, content) {
         }
       }
     `,
-    {
-      variables: {
-        themeId,
-        files: [
-          {
-            filename,
-            body: { type: "TEXT", value: content },
-          },
-        ],
+      {
+        variables: {
+          themeId,
+          files: [
+            {
+              filename,
+              body: { type: "TEXT", value: content },
+            },
+          ],
+        },
       },
-    },
+    ),
+    `Writing ${filename}`,
   );
-
-  const data = await getGraphqlData(response, `Writing ${filename}`);
   const result = data.themeFilesUpsert;
   assertNoUserErrors(result?.userErrors, `Writing ${filename}`);
 

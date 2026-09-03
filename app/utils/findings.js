@@ -1,3 +1,5 @@
+import { contentChecksum } from "./checksum.js";
+
 /** Add stable IDs to scanner findings so the client can select exact matches. */
 export function findingKey(finding) {
   const prefix = finding.filename
@@ -11,6 +13,24 @@ export function identifyFindings(findings) {
     ...finding,
     id: findingKey(finding),
   }));
+}
+
+/**
+ * Stable ignore identity for a finding: the exact code, not its offsets.
+ * Hashing keeps an ignored match ignored across unrelated edits elsewhere
+ * in the same file.
+ */
+export function ignoredFindingKey({ filename, appName, matchedCode }) {
+  return {
+    filename,
+    appName,
+    codeHash: contentChecksum(matchedCode.trim()),
+  };
+}
+
+/** Flat form of an ignore identity for Set lookups. */
+export function ignoredFindingRecordKey({ filename, appName, codeHash }) {
+  return `${filename}|${appName}|${codeHash}`;
 }
 
 /**

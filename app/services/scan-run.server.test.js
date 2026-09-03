@@ -8,10 +8,14 @@ function graphqlResponse(data) {
   return { json: async () => ({ data }) };
 }
 
-function fakeDb() {
+function fakeDb({ ignored = [] } = {}) {
   const created = {};
   return {
     created,
+    ignored,
+    ignoredFinding: {
+      findMany: async () => ignored,
+    },
     scan: {
       create: async ({ data }) => {
         created.scan = data;
@@ -98,4 +102,31 @@ test("checksums are stable and content-derived", async () => {
   const result = await runScan({ admin, db, shop: "shop.example" });
 
   assert.equal(result.fileChecksums["layout/theme.liquid"], contentChecksum(content));
+});
+
+test("findings matching the ignore list are hidden and counted", async () => {
+  const TIDIO =
+    '<script src="https://code.tidio.co/key.js"></script>';
+  const { ignoredFindingKey } = await import("../utils/findings.js");
+  const ignore = ignoredFindingKey({
+    filename: "layout/theme.liquid",
+    appName: "Tidio Live Chat",
+    matchedCode: TIDIO,
+  });
+  const db = fakeDb({
+    ignored: [{ id: "ign-1", shop: "shop.example", ...ignore }],
+  });
+  const admin = adminWithFiles([
+    {
+      filename: "layout/theme.liquid",
+      content: `${TIDIO}\n{% render 'loox_inline' %}`,
+    },
+  ]);
+
+  const result = await runScan({ admin, db, shop: "shop.example" });
+
+  assert.equal(result.findingCount, 1);
+  assert.equal(result.ignoredCount, 1);
+  assert.equal(result.findings[0].appName, "Loox Product Reviews");
+  assert.equal(db.created.scan.findingCount, 1);
 });

@@ -1,8 +1,15 @@
 /** Add stable IDs to scanner findings so the client can select exact matches. */
+export function findingKey(finding) {
+  const prefix = finding.filename
+    ? `finding:${finding.filename}:${finding.startIndex}-${finding.endIndex}`
+    : `finding-${finding.startIndex}-${finding.endIndex}`;
+  return prefix;
+}
+
 export function identifyFindings(findings) {
   return findings.map((finding) => ({
     ...finding,
-    id: `finding-${finding.startIndex}-${finding.endIndex}`,
+    id: findingKey(finding),
   }));
 }
 

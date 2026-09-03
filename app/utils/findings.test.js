@@ -8,6 +8,13 @@ test("adds deterministic finding IDs", () => {
   assert.equal(finding.id, "finding-5-10");
 });
 
+test("scopes IDs to their file when a filename is present", () => {
+  const [finding] = identifyFindings([
+    { filename: "layout/theme.liquid", startIndex: 5, endIndex: 10 },
+  ]);
+  assert.equal(finding.id, "finding:layout/theme.liquid:5-10");
+});
+
 test("removes exact findings and preserves surrounding source", () => {
   const source = "before<remove>middle<also-remove>after";
   const findings = [

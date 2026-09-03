@@ -1,6 +1,43 @@
 const THEME_LIQUID_FILENAME = "layout/theme.liquid";
 const THEME_LIQUID_BACKUP_FILENAME =
   "layout/theme-storesweep-backup.liquid";
+const BACKUP_MARKER = "-storesweep-backup.";
+
+/** Files Shopify stores as text; binary assets are never scanned or written. */
+const TEXT_FILE_EXTENSIONS = [".liquid", ".json"];
+export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+
+export function isTextThemeFile(filename) {
+  return (
+    typeof filename === "string" &&
+    TEXT_FILE_EXTENSIONS.some((extension) => filename.endsWith(extension))
+  );
+}
+
+export function isStoresweepBackupFile(filename) {
+  return typeof filename === "string" && filename.includes(BACKUP_MARKER);
+}
+
+/** sections/header.liquid -> sections/header-storesweep-backup.liquid */
+export function backupFilenameFor(filename) {
+  const separatorIndex = filename.lastIndexOf("/");
+  const directory = separatorIndex === -1 ? "" : filename.slice(0, separatorIndex + 1);
+  const base = filename.slice(separatorIndex + 1);
+  const dotIndex = base.lastIndexOf(".");
+  const stem = dotIndex === -1 ? base : base.slice(0, dotIndex);
+  const extension = dotIndex === -1 ? "" : base.slice(dotIndex);
+  return `${directory}${stem}${BACKUP_MARKER.slice(0, -1)}${extension}`;
+}
+
+export function originalFilenameForBackup(backupFilename) {
+  const separatorIndex = backupFilename.lastIndexOf("/");
+  const directory = separatorIndex === -1 ? "" : backupFilename.slice(0, separatorIndex + 1);
+  const base = backupFilename.slice(separatorIndex + 1);
+  const markerIndex = base.indexOf(BACKUP_MARKER.slice(0, -1));
+  const stem = base.slice(0, markerIndex);
+  const extension = base.slice(markerIndex + BACKUP_MARKER.length - 1);
+  return `${directory}${stem}${extension}`;
+}
 
 async function getGraphqlData(response, operationName) {
   const payload = await response.json();
@@ -47,32 +84,39 @@ function assertNoFileReadErrors(userErrors, operationName) {
  * `await authenticate.admin(request)`.
  */
 export async function getMainThemeId(admin) {
+  return (await getMainTheme(admin)).id;
+}
+
+export async function getMainTheme(admin) {
   const response = await admin.graphql(`#graphql
     query StoreSweepMainTheme {
       themes(first: 1, roles: [MAIN]) {
         nodes {
           id
+          name
         }
       }
     }
   `);
 
   const data = await getGraphqlData(response, "Fetching the live theme");
-  const themeId = data.themes?.nodes?.[0]?.id;
+  const theme = data.themes?.nodes?.[0];
 
-  if (!themeId) {
+  if (!theme?.id) {
     throw new Error("No published theme was found for this store.");
   }
 
-  return themeId;
+  return theme;
 }
 
-/** Fetch the raw text stored in layout/theme.liquid. */
-export async function getThemeLiquid(admin, themeId) {
-  const resolvedThemeId = themeId || (await getMainThemeId(admin));
+/**
+ * Fetch one theme file's text content. Returns null when the file does not
+ * exist or is not stored as text.
+ */
+export async function getThemeTextFile(admin, themeId, filename) {
   const response = await admin.graphql(
     `#graphql
-      query StoreSweepThemeLiquid($themeId: ID!, $filenames: [String!]!) {
+      query StoreSweepThemeFile($themeId: ID!, $filenames: [String!]!) {
         theme(id: $themeId) {
           files(first: 1, filenames: $filenames) {
             nodes {
@@ -93,32 +137,120 @@ export async function getThemeLiquid(admin, themeId) {
     `,
     {
       variables: {
-        themeId: resolvedThemeId,
-        filenames: [THEME_LIQUID_FILENAME],
+        themeId,
+        filenames: [filename],
       },
     },
   );
 
-  const data = await getGraphqlData(response, "Fetching theme.liquid");
+  const data = await getGraphqlData(response, `Fetching ${filename}`);
   if (!data.theme) throw new Error("The published theme no longer exists.");
 
   assertNoFileReadErrors(
     data.theme.files?.userErrors,
-    "Fetching theme.liquid",
+    `Fetching ${filename}`,
   );
 
   const file = data.theme.files?.nodes?.find(
-    ({ filename }) => filename === THEME_LIQUID_FILENAME,
+    (candidate) => candidate.filename === filename,
   );
-  const content = file?.body?.content;
 
-  if (typeof content !== "string") {
+  return typeof file?.body?.content === "string" ? file.body.content : null;
+}
+
+/** Fetch the raw text stored in layout/theme.liquid. */
+export async function getThemeLiquid(admin, themeId) {
+  const resolvedThemeId = themeId || (await getMainThemeId(admin));
+  const content = await getThemeTextFile(
+    admin,
+    resolvedThemeId,
+    THEME_LIQUID_FILENAME,
+  );
+
+  if (content === null) {
     throw new Error(
       `${THEME_LIQUID_FILENAME} was not found or is not a text file.`,
     );
   }
 
   return content;
+}
+
+/**
+ * Page through every theme file and return the scannable text files:
+ * `[{ filename, content }]`. Files larger than MAX_TEXT_FILE_BYTES and
+ * StoreSweep's own backups are excluded.
+ */
+export async function listThemeTextFiles(
+  admin,
+  themeId,
+  { pageSize = 100, maxFiles = 2000 } = {},
+) {
+  const files = [];
+  let after = null;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    if (files.length > maxFiles) {
+      throw new Error(
+        "This theme has more files than StoreSweep can scan in one pass.",
+      );
+    }
+
+    const response = await admin.graphql(
+      `#graphql
+        query StoreSweepThemeFiles($themeId: ID!, $first: Int!, $after: String) {
+          theme(id: $themeId) {
+            files(first: $first, after: $after) {
+              nodes {
+                filename
+                body {
+                  ... on OnlineStoreThemeFileBodyText {
+                    content
+                  }
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              userErrors {
+                code
+                filename
+              }
+            }
+          }
+        }
+      `,
+      {
+        variables: { themeId, first: pageSize, after },
+      },
+    );
+
+    const data = await getGraphqlData(response, "Listing theme files");
+    if (!data.theme) throw new Error("The published theme no longer exists.");
+
+    assertNoFileReadErrors(
+      data.theme.files?.userErrors,
+      "Listing theme files",
+    );
+
+    for (const file of data.theme.files?.nodes || []) {
+      if (
+        typeof file.body?.content === "string" &&
+        isTextThemeFile(file.filename) &&
+        !isStoresweepBackupFile(file.filename) &&
+        Buffer.byteLength(file.body.content, "utf8") <= MAX_TEXT_FILE_BYTES
+      ) {
+        files.push({ filename: file.filename, content: file.body.content });
+      }
+    }
+
+    hasNextPage = Boolean(data.theme.files?.pageInfo?.hasNextPage);
+    after = data.theme.files?.pageInfo?.endCursor ?? null;
+  }
+
+  return files;
 }
 
 async function upsertThemeTextFile(admin, themeId, filename, content) {
@@ -174,29 +306,37 @@ async function upsertThemeTextFile(admin, themeId, filename, content) {
   };
 }
 
-/** Save theme.liquid as layout/theme-storesweep-backup.liquid. */
-export async function backupThemeLiquid(admin, themeId, content) {
+/** Save an original file as <name>-storesweep-backup next to it. */
+export async function backupThemeFile(admin, themeId, filename, content) {
   const source =
     typeof content === "string"
       ? content
-      : await getThemeLiquid(admin, themeId);
+      : await getThemeTextFile(admin, themeId, filename);
+
+  if (source === null) {
+    throw new Error(`${filename} was not found or is not a text file.`);
+  }
 
   return upsertThemeTextFile(
     admin,
     themeId,
-    THEME_LIQUID_BACKUP_FILENAME,
+    backupFilenameFor(filename),
     source,
   );
 }
 
-/** Overwrite layout/theme.liquid. Call backupThemeLiquid first. */
-export async function updateThemeLiquid(admin, themeId, content) {
-  return upsertThemeTextFile(
-    admin,
-    themeId,
-    THEME_LIQUID_FILENAME,
-    content,
-  );
+/** Save theme.liquid as layout/theme-storesweep-backup.liquid. */
+export async function backupThemeLiquid(admin, themeId, content) {
+  return backupThemeFile(admin, themeId, THEME_LIQUID_FILENAME, content);
 }
 
-export { THEME_LIQUID_BACKUP_FILENAME, THEME_LIQUID_FILENAME };
+/** Overwrite layout/theme.liquid. Call backupThemeLiquid first. */
+export async function updateThemeLiquid(admin, themeId, content) {
+  return upsertThemeTextFile(admin, themeId, THEME_LIQUID_FILENAME, content);
+}
+
+export {
+  upsertThemeTextFile as writeThemeFile,
+  THEME_LIQUID_BACKUP_FILENAME,
+  THEME_LIQUID_FILENAME,
+};

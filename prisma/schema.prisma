@@ -32,3 +32,87 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+/// One row per shop that has ever used StoreSweep. Lifecycle fields are
+/// maintained by webhooks (app/uninstalled, app/scopes_update).
+model Shop {
+  shop          String    @id
+  firstSeenAt   DateTime  @default(now())
+  lastActiveAt  DateTime  @default(now())
+  uninstalledAt DateTime?
+  lastScanAt    DateTime?
+  scanCount     Int       @default(0)
+  cleanCount    Int       @default(0)
+  scans         Scan[]
+  cleanOperations CleanOperation[]
+  auditEvents   AuditEvent[]
+}
+
+/// One completed scan of the store's published theme.
+model Scan {
+  id           String   @id @default(cuid())
+  shop         String
+  themeId      String
+  themeName    String?
+  status       String   @default("completed") // completed | failed
+  fileCount    Int      @default(0)
+  findingCount Int      @default(0)
+  durationMs   Int?
+  /// JSON map of filename -> sha256 checksum captured at scan time; used to
+  /// detect theme drift between a scan and a later cleaning run.
+  fileChecksums String?
+  createdAt    DateTime @default(now())
+  shopRef      Shop?    @relation(fields: [shop], references: [shop])
+  findings     ScanFinding[]
+  cleanOperations CleanOperation[]
+
+  @@index([shop, createdAt])
+}
+
+/// A single leftover-code match found during a scan.
+model ScanFinding {
+  id          String @id @default(cuid())
+  scanId      String
+  scan        Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  findingKey  String // stable key derived from filename + offsets
+  filename    String
+  appName     String
+  category    String?
+  confidence  String?
+  matchedCode String
+  startLine   Int
+  endLine     Int
+
+  @@index([scanId])
+  @@index([findingKey])
+}
+
+/// One executed cleaning run. Backup filenames allow one-click restore.
+model CleanOperation {
+  id           String   @id @default(cuid())
+  shop         String
+  scanId       String?
+  scan         Scan?    @relation(fields: [scanId], references: [id])
+  status       String   @default("completed") // completed | failed | restored
+  removedCount Int      @default(0)
+  filesChanged Int      @default(0)
+  /// JSON array of [{ originalFilename, backupFilename, checksumBefore }]
+  backups      String?
+  restoredAt   DateTime?
+  createdAt    DateTime @default(now())
+  shopRef      Shop?    @relation(fields: [shop], references: [shop])
+
+  @@index([shop, createdAt])
+}
+
+/// Append-only trail of every consequential action StoreSweep performs.
+model AuditEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  action    String // scan.completed, clean.started, clean.completed, theme.restored, ...
+  detail    String? // JSON payload
+  createdAt DateTime @default(now())
+  shopRef   Shop?    @relation(fields: [shop], references: [shop])
+
+  @@index([shop, createdAt])
+}

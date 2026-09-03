@@ -1,41 +1,34 @@
-import { createHash } from "node:crypto";
-
 import { authenticate } from "../shopify.server";
-import {
-  getMainThemeId,
-  getThemeLiquid,
-} from "../services/theme-api.server";
-import { identifyFindings } from "../utils/findings";
-import { scanThemeLiquid } from "../utils/scanner";
-
-const checksum = (content) =>
-  createHash("sha256").update(content, "utf8").digest("hex");
+import db from "../db.server";
+import { runScan } from "../services/scan-run.server";
+import { enforceRateLimit, errorResponse, jsonResponse } from "../utils/api-helpers.server";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  const limited = enforceRateLimit("scan", shop);
+  if (limited) return limited;
 
   try {
-    const themeId = await getMainThemeId(admin);
-    const themeContent = await getThemeLiquid(admin, themeId);
-    const findings = identifyFindings(scanThemeLiquid(themeContent));
-
-    return Response.json(
-      {
-        success: true,
-        findings,
-        themeContent,
-        themeChecksum: checksum(themeContent),
-      },
-      { headers: { "Cache-Control": "private, no-store" } },
-    );
+    const result = await runScan({ admin, db, shop });
+    return jsonResponse({ success: true, ...result });
   } catch (error) {
-    console.error("StoreSweep theme scan failed", error);
-    return Response.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Theme scan failed.",
-      },
-      { status: 500, headers: { "Cache-Control": "private, no-store" } },
+    console.error(
+      JSON.stringify({
+        level: "error",
+        service: "storesweep",
+        message: "theme scan failed",
+        shop,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+
+    return errorResponse(
+      error instanceof Error
+        ? error.message
+        : "StoreSweep could not scan the live theme.",
+      500,
     );
   }
 };

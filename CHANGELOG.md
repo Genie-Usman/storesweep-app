@@ -1,4 +1,25 @@
-# @shopify/shopify-app-template-react-router
+# StoreSweep
+
+## 2026.09.03 — Enterprise hardening (Phase 2)
+
+- Scan the entire published theme (all liquid/JSON text files via paginated
+  Admin GraphQL), not just `layout/theme.liquid`
+- Expanded signature catalog (~30 signatures) with categories and
+  confidence levels, derived from storefront script-footprint research
+- Server-authoritative cleaning: the browser only submits finding IDs and
+  scan-time checksums; the server re-scans, verifies, backs up, and writes
+- One-click restore of the last cleaning run from in-theme backups
+- Persisted scan history, cleaning history, and audit trail (Prisma:
+  Shop, Scan, ScanFinding, CleanOperation, AuditEvent)
+- History and Settings pages; dashboard rework
+- Per-shop rate limiting on scan/clean/restore, structured JSON logging,
+  request body size ceilings
+- Mandatory GDPR webhooks (customers/data_request, customers/redact,
+  shop/redact) with shop-data deletion after uninstall
+- `npm test` (47 tests via Node's built-in runner), GitHub Actions CI
+  (lint, typecheck, test, build), rewritten README and architecture docs
+
+## @shopify/shopify-app-template-react-router
 
 ## 2026.02.09
 - Add declarative product metafield definition and demonstrate metafield usage in the product creation flow

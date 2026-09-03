@@ -1,107 +1,66 @@
-import { createHash } from "node:crypto";
-
 import { authenticate } from "../shopify.server";
-import { waitForShopifyJob } from "../services/shopify-job.server";
+import db from "../db.server";
+import { runClean, ThemeChangedError } from "../services/clean-run.server";
 import {
-  backupThemeLiquid,
-  getMainThemeId,
-  getThemeLiquid,
-  updateThemeLiquid,
-} from "../services/theme-api.server";
-import { identifyFindings, removeFindings } from "../utils/findings";
-import { scanThemeLiquid } from "../utils/scanner";
+  enforceRateLimit,
+  errorResponse,
+  jsonResponse,
+  readJsonBody,
+} from "../utils/api-helpers.server";
 import {
   isThemeWriteAccessError,
   THEME_WRITE_EXEMPTION_URL,
 } from "../utils/theme-write-access";
-
-const checksum = (content) =>
-  createHash("sha256").update(content, "utf8").digest("hex");
-
-const errorResponse = (error, status = 400, extra = {}) =>
-  Response.json(
-    { success: false, error, ...extra },
-    { status, headers: { "Cache-Control": "private, no-store" } },
-  );
+import { logger } from "../utils/logger.server";
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   if (request.method !== "POST") {
     return errorResponse("Method not allowed.", 405);
   }
 
-  let submitted;
-  try {
-    submitted = await request.json();
-  } catch {
-    return errorResponse("The request body must be valid JSON.");
-  }
+  const limited = enforceRateLimit("clean", shop);
+  if (limited) return limited;
 
-  const { modifiedThemeCode, selectedFindingIds, themeChecksum } = submitted;
+  const parsed = await readJsonBody(request);
+  if (parsed.error) return errorResponse(parsed.error);
+
+  const { selectedFindingIds, fileChecksums, scanId } = parsed.body;
+
   if (
-    typeof modifiedThemeCode !== "string" ||
     !Array.isArray(selectedFindingIds) ||
     selectedFindingIds.length === 0 ||
-    !selectedFindingIds.every((id) => typeof id === "string") ||
-    typeof themeChecksum !== "string"
+    !selectedFindingIds.every((id) => typeof id === "string")
   ) {
-    return errorResponse(
-      "Modified theme code and selected findings are required.",
-    );
+    return errorResponse("Selected findings are required.");
+  }
+
+  if (
+    fileChecksums !== undefined &&
+    (typeof fileChecksums !== "object" ||
+      fileChecksums === null ||
+      Object.values(fileChecksums).some((value) => typeof value !== "string"))
+  ) {
+    return errorResponse("File checksums must be a map of filename to checksum.");
   }
 
   try {
-    const themeId = await getMainThemeId(admin);
-    const currentThemeCode = await getThemeLiquid(admin, themeId);
+    const result = await runClean({
+      admin,
+      db,
+      shop,
+      scanId: typeof scanId === "string" ? scanId : null,
+      selectedFindingIds,
+      fileChecksums: fileChecksums ?? {},
+    });
 
-    if (checksum(currentThemeCode) !== themeChecksum) {
-      return errorResponse(
-        "The live theme changed after this scan. Scan again before cleaning.",
-        409,
-      );
-    }
-
-    const currentFindings = identifyFindings(scanThemeLiquid(currentThemeCode));
-    const findingsById = new Map(
-      currentFindings.map((finding) => [finding.id, finding]),
-    );
-    const uniqueSelectedIds = [...new Set(selectedFindingIds)];
-    const selectedFindings = uniqueSelectedIds.map((id) => findingsById.get(id));
-
-    if (selectedFindings.some((finding) => !finding)) {
-      return errorResponse(
-        "One or more selected findings are no longer present. Scan again.",
-        409,
-      );
-    }
-
-    const verifiedThemeCode = removeFindings(
-      currentThemeCode,
-      selectedFindings,
-    );
-    if (verifiedThemeCode !== modifiedThemeCode) {
-      return errorResponse(
-        "The submitted theme code contains changes outside the selected findings.",
-      );
-    }
-
-    const backup = await backupThemeLiquid(admin, themeId, currentThemeCode);
-    await waitForShopifyJob(admin, backup.jobId);
-
-    const update = await updateThemeLiquid(admin, themeId, verifiedThemeCode);
-    await waitForShopifyJob(admin, update.jobId);
-
-    return Response.json(
-      {
-        success: true,
-        cleanedCount: uniqueSelectedIds.length,
-        backupFilename: backup.filename,
-      },
-      { headers: { "Cache-Control": "private, no-store" } },
-    );
+    return jsonResponse({ success: true, ...result });
   } catch (error) {
-    console.error("StoreSweep theme clean failed", error);
+    if (error instanceof ThemeChangedError) {
+      return errorResponse(error.message, 409, { code: "THEME_CHANGED" });
+    }
 
     if (isThemeWriteAccessError(error)) {
       return errorResponse(
@@ -114,8 +73,15 @@ export const action = async ({ request }) => {
       );
     }
 
+    logger.error("theme clean failed", {
+      shop,
+      error,
+    });
+
     return errorResponse(
-      error instanceof Error ? error.message : "Theme clean failed.",
+      error instanceof Error
+        ? error.message
+        : "StoreSweep could not clean the selected code.",
       500,
     );
   }

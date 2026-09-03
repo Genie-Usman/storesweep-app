@@ -1,14 +1,66 @@
 import { useEffect, useMemo, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { authenticate } from "../shopify.server";
-import { removeFindings } from "../utils/findings";
+import db from "../db.server";
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  const [lastScan, lastClean] = await Promise.all([
+    db.scan.findFirst({
+      where: { shop, status: "completed" },
+      orderBy: { createdAt: "desc" },
+      include: {
+        findings: { orderBy: [{ filename: "asc" }, { startLine: "asc" }] },
+      },
+    }),
+    db.cleanOperation.findFirst({
+      where: { shop, status: "completed" },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  return {
+    lastScan:
+      lastScan === null
+        ? null
+        : {
+            scanId: lastScan.id,
+            themeName: lastScan.themeName,
+            createdAtLabel: `${dateFormatter.format(lastScan.createdAt)} UTC`,
+            fileCount: lastScan.fileCount,
+            findingCount: lastScan.findingCount,
+            fileChecksums: JSON.parse(lastScan.fileChecksums || "{}"),
+            findings: lastScan.findings.map((finding) => ({
+              id: finding.findingKey,
+              filename: finding.filename,
+              appName: finding.appName,
+              category: finding.category,
+              confidence: finding.confidence,
+              matchedCode: finding.matchedCode,
+              lineNumbers: { start: finding.startLine, end: finding.endLine },
+            })),
+          },
+    lastClean:
+      lastClean === null
+        ? null
+        : {
+            cleanId: lastClean.id,
+            createdAtLabel: `${dateFormatter.format(lastClean.createdAt)} UTC`,
+            removedCount: lastClean.removedCount,
+            filesChanged: lastClean.filesChanged,
+          },
+  };
 };
 
 function codeSnippet(code, maximumLength = 160) {
@@ -22,26 +74,62 @@ function lineLabel({ start, end }) {
   return start === end ? `Line ${start}` : `Lines ${start}-${end}`;
 }
 
+function confidenceLabel(confidence) {
+  switch (confidence) {
+    case "high":
+      return "Dedicated app code";
+    case "medium":
+      return "Vendor script";
+    case "low":
+      return "Often intentional";
+    default:
+      return "Review manually";
+  }
+}
+
 export default function StoreSweepDashboard() {
+  const { lastScan: initialScan, lastClean } = useLoaderData();
   const scanFetcher = useFetcher();
   const cleanFetcher = useFetcher();
+  const restoreFetcher = useFetcher();
+  const revalidator = useRevalidator();
   const shopify = useAppBridge();
-  const [scanResult, setScanResult] = useState(null);
+
+  const [scanResult, setScanResult] = useState(
+    initialScan
+      ? {
+          scanId: initialScan.scanId,
+          themeName: initialScan.themeName,
+          createdAtLabel: initialScan.createdAtLabel,
+          fileCount: initialScan.fileCount,
+          findingCount: initialScan.findingCount,
+          fileChecksums: initialScan.fileChecksums,
+          findings: initialScan.findings,
+        }
+      : null,
+  );
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [writeAccessRequired, setWriteAccessRequired] = useState(null);
 
   const isScanning = scanFetcher.state !== "idle";
   const isCleaning = cleanFetcher.state !== "idle";
+  const isRestoring = restoreFetcher.state !== "idle";
+  const isBusy = isScanning || isCleaning || isRestoring;
+
   const findings = useMemo(() => scanResult?.findings || [], [scanResult]);
+  const findingsByFile = useMemo(() => {
+    const grouped = new Map();
+    for (const finding of findings) {
+      if (!grouped.has(finding.filename)) grouped.set(finding.filename, []);
+      grouped.get(finding.filename).push(finding);
+    }
+    return [...grouped.entries()];
+  }, [findings]);
+
   const allSelected =
     findings.length > 0 && selectedIds.size === findings.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
-
-  const selectedFindings = useMemo(
-    () => findings.filter((finding) => selectedIds.has(finding.id)),
-    [findings, selectedIds],
-  );
 
   useEffect(() => {
     if (!scanFetcher.data) return;
@@ -59,14 +147,16 @@ export default function StoreSweepDashboard() {
     if (!cleanFetcher.data) return;
 
     if (cleanFetcher.data.success) {
+      const { removedCount, filesChanged } = cleanFetcher.data;
       shopify.toast.show(
-        `${cleanFetcher.data.cleanedCount} code ${
-          cleanFetcher.data.cleanedCount === 1 ? "block" : "blocks"
-        } cleaned. Backup created.`,
+        `${removedCount} code ${removedCount === 1 ? "block" : "blocks"} removed from ${filesChanged} ${
+          filesChanged === 1 ? "file" : "files"
+        }. Backups created.`,
       );
       setSelectedIds(new Set());
       setErrorMessage("");
       setWriteAccessRequired(null);
+      revalidator.revalidate();
       scanFetcher.load("/api/theme/scan");
     } else if (cleanFetcher.data.code === "THEME_WRITE_ACCESS_REQUIRED") {
       setWriteAccessRequired({
@@ -77,7 +167,24 @@ export default function StoreSweepDashboard() {
     } else {
       setErrorMessage(cleanFetcher.data.error || "Theme cleaning failed.");
     }
-  }, [cleanFetcher.data, scanFetcher, shopify]);
+  }, [cleanFetcher.data, scanFetcher, shopify, revalidator]);
+
+  useEffect(() => {
+    if (!restoreFetcher.data) return;
+
+    if (restoreFetcher.data.success) {
+      shopify.toast.show(
+        `${restoreFetcher.data.restoredFiles.length} ${
+          restoreFetcher.data.restoredFiles.length === 1 ? "file" : "files"
+        } restored from backup.`,
+      );
+      setErrorMessage("");
+      revalidator.revalidate();
+      scanFetcher.load("/api/theme/scan");
+    } else {
+      setErrorMessage(restoreFetcher.data.error || "Restore failed.");
+    }
+  }, [restoreFetcher.data, scanFetcher, shopify, revalidator]);
 
   const scanTheme = () => {
     setErrorMessage("");
@@ -100,40 +207,34 @@ export default function StoreSweepDashboard() {
   };
 
   const cleanSelectedCode = () => {
-    if (
-      !scanResult ||
-      selectedFindings.length === 0 ||
-      writeAccessRequired
-    ) {
-      return;
-    }
+    if (!scanResult || selectedIds.size === 0 || writeAccessRequired) return;
 
-    try {
-      const modifiedThemeCode = removeFindings(
-        scanResult.themeContent,
-        selectedFindings,
-      );
+    setErrorMessage("");
+    cleanFetcher.submit(
+      {
+        selectedFindingIds: [...selectedIds],
+        fileChecksums: scanResult.fileChecksums || {},
+        scanId: scanResult.scanId,
+      },
+      {
+        method: "POST",
+        action: "/api/theme/clean",
+        encType: "application/json",
+      },
+    );
+  };
 
-      setErrorMessage("");
-      cleanFetcher.submit(
-        {
-          modifiedThemeCode,
-          selectedFindingIds: selectedFindings.map((finding) => finding.id),
-          themeChecksum: scanResult.themeChecksum,
-        },
-        {
-          method: "POST",
-          action: "/api/theme/clean",
-          encType: "application/json",
-        },
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "The selected code could not be prepared safely.",
-      );
-    }
+  const restoreLastClean = () => {
+    if (!lastClean || isBusy) return;
+    setErrorMessage("");
+    restoreFetcher.submit(
+      { cleanOperationId: lastClean.cleanId },
+      {
+        method: "POST",
+        action: "/api/theme/restore",
+        encType: "application/json",
+      },
+    );
   };
 
   return (
@@ -141,7 +242,7 @@ export default function StoreSweepDashboard() {
       <s-button
         slot="primary-action"
         onClick={scanTheme}
-        {...(isScanning ? { loading: true } : {})}
+        {...(isBusy ? { loading: true } : {})}
       >
         Scan live theme
       </s-button>
@@ -149,8 +250,9 @@ export default function StoreSweepDashboard() {
       <s-section heading="Find leftover app code">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            StoreSweep checks your published theme for code that may have been
-            left behind by apps. Scanning does not change your store.
+            StoreSweep scans every text file in your published theme for code
+            that may have been left behind by uninstalled apps. Scanning does
+            not change your store.
           </s-paragraph>
           <s-paragraph>
             Review every match before cleaning. A detected app may still be
@@ -182,7 +284,7 @@ export default function StoreSweepDashboard() {
         </s-banner>
       )}
 
-      {isScanning && !scanResult && (
+      {isScanning && (
         <s-section heading="Scanning your live theme">
           <s-stack direction="inline" gap="base" alignItems="center">
             <s-spinner
@@ -190,7 +292,7 @@ export default function StoreSweepDashboard() {
               size="large"
             />
             <s-paragraph>
-              Checking theme.liquid for recognizable leftover app code...
+              Checking every theme file for recognizable leftover app code...
             </s-paragraph>
           </s-stack>
         </s-section>
@@ -205,54 +307,69 @@ export default function StoreSweepDashboard() {
         </s-section>
       )}
 
-      {scanResult && findings.length === 0 && !isScanning && (
-        <s-banner heading="No recognizable leftover code found" tone="success">
-          StoreSweep did not find any known app signatures in your live
-          theme.liquid file.
-        </s-banner>
+      {scanResult && !isScanning && (
+        <s-section heading={`Last scan${scanResult.createdAtLabel ? ` — ${scanResult.createdAtLabel}` : ""}`}>
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              {scanResult.themeName
+                ? `Theme: ${scanResult.themeName}. `
+                : ""}
+              {scanResult.fileCount} files checked.
+            </s-paragraph>
+            {findings.length === 0 ? (
+              <s-banner
+                heading="No recognizable leftover code found"
+                tone="success"
+              >
+                StoreSweep did not find any known app signatures in your
+                published theme.
+              </s-banner>
+            ) : (
+              <s-banner
+                heading={`${findings.length} possible leftover ${
+                  findings.length === 1 ? "block" : "blocks"
+                } found`}
+                tone="warning"
+              >
+                Select only code you recognize as belonging to an app you no
+                longer use. StoreSweep backs up every file before cleaning.
+              </s-banner>
+            )}
+          </s-stack>
+        </s-section>
       )}
 
       {scanResult && findings.length > 0 && (
-        <>
-          <s-banner
-            heading={`${findings.length} possible leftover ${
-              findings.length === 1 ? "block" : "blocks"
-            } found`}
-            tone="warning"
-          >
-            Select only code you recognize as belonging to an app you no longer
-            use. StoreSweep creates a backup before cleaning.
-          </s-banner>
+        <s-section heading="Review scan results" padding="none">
+          <s-table {...(isScanning ? { loading: true } : {})}>
+            <s-table-header-row>
+              <s-table-header>
+                <s-checkbox
+                  label="Select all"
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  disabled={isBusy}
+                  onChange={(event) =>
+                    toggleAll(event.currentTarget.checked)
+                  }
+                />
+              </s-table-header>
+              <s-table-header listSlot="primary">App or block</s-table-header>
+              <s-table-header listSlot="inline">Location</s-table-header>
+              <s-table-header listSlot="secondary">
+                Code preview
+              </s-table-header>
+            </s-table-header-row>
 
-          <s-section heading="Review scan results" padding="none">
-            <s-table {...(isScanning ? { loading: true } : {})}>
-              <s-table-header-row>
-                <s-table-header>
-                  <s-checkbox
-                    label="Select all"
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    disabled={isCleaning}
-                    onChange={(event) =>
-                      toggleAll(event.currentTarget.checked)
-                    }
-                  />
-                </s-table-header>
-                <s-table-header listSlot="primary">App or block</s-table-header>
-                <s-table-header listSlot="inline">Location</s-table-header>
-                <s-table-header listSlot="secondary">
-                  Code preview
-                </s-table-header>
-              </s-table-header-row>
-
-              <s-table-body>
-                {findings.map((finding) => (
+            <s-table-body>
+              {findingsByFile.map(([filename, fileFindings]) =>
+                fileFindings.map((finding) => (
                   <s-table-row key={finding.id}>
                     <s-table-cell>
                       <s-checkbox
                         label={`Select ${finding.appName}`}
                         checked={selectedIds.has(finding.id)}
-                        disabled={isCleaning}
+                        disabled={isBusy}
                         onChange={(event) =>
                           toggleFinding(
                             finding.id,
@@ -261,9 +378,21 @@ export default function StoreSweepDashboard() {
                         }
                       />
                     </s-table-cell>
-                    <s-table-cell>{finding.appName}</s-table-cell>
                     <s-table-cell>
-                      {lineLabel(finding.lineNumbers)}
+                      <s-stack direction="block" gap="tight">
+                        <s-paragraph>{finding.appName}</s-paragraph>
+                        <s-paragraph>
+                          {confidenceLabel(finding.confidence)}
+                        </s-paragraph>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="tight">
+                        <s-paragraph>{filename}</s-paragraph>
+                        <s-paragraph>
+                          {lineLabel(finding.lineNumbers)}
+                        </s-paragraph>
+                      </s-stack>
                     </s-table-cell>
                     <s-table-cell>
                       <s-box
@@ -275,38 +404,60 @@ export default function StoreSweepDashboard() {
                       </s-box>
                     </s-table-cell>
                   </s-table-row>
-                ))}
-              </s-table-body>
-            </s-table>
+                )),
+              )}
+            </s-table-body>
+          </s-table>
 
-            <s-box padding="base">
-              <s-stack direction="inline" gap="base" alignItems="center">
-                <s-button
-                  variant="primary"
-                  tone="critical"
-                  disabled={
-                    selectedIds.size === 0 ||
-                    isScanning ||
-                    Boolean(writeAccessRequired)
-                  }
-                  onClick={cleanSelectedCode}
-                  {...(isCleaning ? { loading: true } : {})}
-                >
-                  Clean selected code
-                </s-button>
-                <s-paragraph>
-                  {writeAccessRequired
-                    ? "Automatic cleaning is unavailable until Shopify approves theme-file access."
-                    : selectedIds.size === 0
-                      ? "Select at least one result to clean."
-                      : `${selectedIds.size} ${
-                          selectedIds.size === 1 ? "result" : "results"
-                        } selected.`}
-                </s-paragraph>
-              </s-stack>
-            </s-box>
-          </s-section>
-        </>
+          <s-box padding="base">
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-button
+                variant="primary"
+                tone="critical"
+                disabled={selectedIds.size === 0 || isBusy}
+                onClick={cleanSelectedCode}
+                {...(isCleaning ? { loading: true } : {})}
+              >
+                Clean selected code
+              </s-button>
+              <s-paragraph>
+                {selectedIds.size === 0
+                  ? "Select at least one result to clean."
+                  : `${selectedIds.size} ${
+                      selectedIds.size === 1 ? "result" : "results"
+                    } selected. Server-side verification will re-check the theme before writing.`}
+              </s-paragraph>
+            </s-stack>
+          </s-box>
+        </s-section>
+      )}
+
+      {lastClean && (
+        <s-section heading="Last cleaning run">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              {lastClean.removedCount} code{" "}
+              {lastClean.removedCount === 1 ? "block" : "blocks"} removed from{" "}
+              {lastClean.filesChanged}{" "}
+              {lastClean.filesChanged === 1 ? "file" : "files"} on{" "}
+              {lastClean.createdAtLabel}. A full backup of every changed file
+              was stored in your theme.
+            </s-paragraph>
+            <s-stack direction="inline" gap="base">
+              <s-button
+                onClick={restoreLastClean}
+                disabled={isBusy}
+                {...(isRestoring ? { loading: true } : {})}
+              >
+                Restore last cleaning run
+              </s-button>
+              <s-paragraph>
+                Restoring copies the backed-up originals back over the cleaned
+                files.
+              </s-paragraph>
+            </s-stack>
+          </s-stack>
+        </s-section>
       )}
     </s-page>
   );

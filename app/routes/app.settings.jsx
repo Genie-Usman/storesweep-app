@@ -26,9 +26,35 @@ function actionLabel(action) {
       return "Backup restored";
     case "app.uninstalled":
       return "App uninstalled";
+    case "finding.ignored":
+      return "Finding ignored";
+    case "finding.unignored":
+      return "Ignore removed";
+    case "app.ignored":
+      return "App ignored";
+    case "app.unignored":
+      return "App ignore removed";
     default:
       return action;
   }
+}
+
+function StatCard({ value, label }) {
+  return (
+    <s-grid-item>
+      <s-box
+        padding="base"
+        borderRadius="base"
+        background="subdued"
+        min-height="100%"
+      >
+        <s-stack direction="block" gap="tight">
+          <s-text type="strong">{value}</s-text>
+          <s-text color="subdued">{label}</s-text>
+        </s-stack>
+      </s-box>
+    </s-grid-item>
+  );
 }
 
 export const loader = async ({ request }) => {
@@ -72,50 +98,65 @@ export default function StoreSweepSettings() {
     <s-page heading="Settings">
       <s-section heading="Store">
         <s-stack direction="block" gap="base">
-          <s-paragraph>{shop}</s-paragraph>
+          <s-text type="strong">{shop}</s-text>
+          <s-grid gridTemplateColumns="repeat(3, 1fr)" gap="base">
+            <StatCard value={String(stats.scanCount)} label="Scans run" />
+            <StatCard value={String(stats.cleanCount)} label="Cleaning runs" />
+            <StatCard
+              value={stats.lastScanLabel || "—"}
+              label="Last scan"
+            />
+          </s-grid>
           {stats.firstSeenLabel && (
-            <s-paragraph>
-              Using StoreSweep since {stats.firstSeenLabel}. {stats.scanCount}{" "}
-              scans and {stats.cleanCount} cleaning runs to date.
-            </s-paragraph>
-          )}
-          {stats.lastScanLabel && (
-            <s-paragraph>
-              Last scan: {stats.lastScanLabel}.
-            </s-paragraph>
+            <s-text color="subdued">
+              Using StoreSweep since {stats.firstSeenLabel}.
+            </s-text>
           )}
         </s-stack>
       </s-section>
 
-      <s-section heading="What StoreSweep scans">
+      <s-section heading="How StoreSweep works">
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Every scan reads the text files (liquid and JSON) of your
-            currently published theme and looks for code signatures left
-            behind by uninstalled third-party apps. Binary assets such as
-            images are never read, and scanning never writes to your store.
-          </s-paragraph>
-          <s-paragraph>
-            Cleaning only ever removes the exact code ranges you selected and
-            reviewed. Before any file is changed, StoreSweep stores a backup
-            copy of the original next to it, so every change can be restored.
-          </s-paragraph>
-          <s-paragraph>
-            StoreSweep keeps no customer personal data. Scan results,
-            cleaning history, and an audit trail are stored for your shop
-            only, and are deleted 30 days after the app is uninstalled.
-          </s-paragraph>
+          <s-stack direction="block" gap="tight">
+            <s-text type="strong">Scanning</s-text>
+            <s-text color="subdued">
+              Every scan reads the text files (liquid and JSON) of the
+              selected theme and looks for code signatures left behind by
+              uninstalled third-party apps. Binary assets such as images are
+              never read, and scanning never writes to your store.
+            </s-text>
+          </s-stack>
+          <s-divider direction="block" />
+          <s-stack direction="block" gap="tight">
+            <s-text type="strong">Cleaning</s-text>
+            <s-text color="subdued">
+              Cleaning only ever removes the exact code ranges you selected
+              and reviewed. Before any file is changed, StoreSweep stores a
+              backup copy of the original next to it, so every change can be
+              restored with one click.
+            </s-text>
+          </s-stack>
+          <s-divider direction="block" />
+          <s-stack direction="block" gap="tight">
+            <s-text type="strong">Your data</s-text>
+            <s-text color="subdued">
+              StoreSweep keeps no customer personal data. Scan results,
+              cleaning history, and an audit trail are stored for your shop
+              only, and are deleted 30 days after the app is uninstalled.
+            </s-text>
+          </s-stack>
         </s-stack>
       </s-section>
 
-      <s-section heading={`Audit trail (latest ${auditEvents.length})`} padding="none">
+      <s-section
+        heading={`Audit trail (latest ${auditEvents.length})`}
+        padding={auditEvents.length === 0 ? undefined : "none"}
+      >
         {auditEvents.length === 0 ? (
-          <s-box padding="base">
-            <s-paragraph>
-              No activity recorded yet. Every scan and cleaning run is
-              recorded here.
-            </s-paragraph>
-          </s-box>
+          <s-text color="subdued">
+            No activity recorded yet. Every scan and cleaning run is recorded
+            here.
+          </s-text>
         ) : (
           <s-table>
             <s-table-header-row>
@@ -125,7 +166,9 @@ export default function StoreSweepSettings() {
             <s-table-body>
               {auditEvents.map((event) => (
                 <s-table-row key={event.id}>
-                  <s-table-cell>{event.createdAtLabel}</s-table-cell>
+                  <s-table-cell>
+                    <s-text type="strong">{event.createdAtLabel}</s-text>
+                  </s-table-cell>
                   <s-table-cell>{event.action}</s-table-cell>
                 </s-table-row>
               ))}

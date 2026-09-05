@@ -48,7 +48,10 @@ export const loader = async ({ request }) => {
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
-      db.shop.findUnique({ where: { shop }, select: { lastThemePublishAt: true } }),
+      db.shop.findUnique({
+        where: { shop },
+        select: { lastThemePublishAt: true },
+      }),
       getThemes(admin).catch(() => []),
       getSubscriptionStatus(billing),
     ]);
@@ -88,11 +91,13 @@ export const loader = async ({ request }) => {
           },
     ignoredFindings: ignoredFindings.map((record) => ({
       id: record.id,
+      type: "finding",
       filename: record.filename,
       appName: record.appName,
     })),
     ignoredApps: ignoredApps.map((record) => ({
       id: record.id,
+      type: "app",
       appName: record.appName,
     })),
     lastThemePublishAt: shopRecord?.lastThemePublishAt?.toISOString() ?? null,
@@ -101,28 +106,46 @@ export const loader = async ({ request }) => {
   };
 };
 
-function codeSnippet(code, maximumLength = 160) {
+function codeSnippet(code, maximumLength = 140) {
   const compactCode = code.replace(/\s+/g, " ").trim();
   return compactCode.length > maximumLength
-    ? `${compactCode.slice(0, maximumLength)}...`
+    ? `${compactCode.slice(0, maximumLength)}…`
     : compactCode;
 }
 
 function lineLabel({ start, end }) {
-  return start === end ? `Line ${start}` : `Lines ${start}-${end}`;
+  return start === end ? `Line ${start}` : `Lines ${start}–${end}`;
 }
 
-function confidenceLabel(confidence) {
+function confidenceBadge(confidence) {
   switch (confidence) {
     case "high":
-      return "Dedicated app code";
+      return { tone: "info", label: "Dedicated app code" };
     case "medium":
-      return "Vendor script";
+      return { tone: "caution", label: "Vendor script" };
     case "low":
-      return "Often intentional";
+      return { tone: "neutral", label: "Often intentional" };
     default:
-      return "Review manually";
+      return { tone: "neutral", label: "Review manually" };
   }
+}
+
+function StatCard({ value, label }) {
+  return (
+    <s-grid-item>
+      <s-box
+        padding="base"
+        borderRadius="base"
+        background="subdued"
+        min-height="100%"
+      >
+        <s-stack direction="block" gap="tight">
+          <s-text type="strong">{value}</s-text>
+          <s-text color="subdued">{label}</s-text>
+        </s-stack>
+      </s-box>
+    </s-grid-item>
+  );
 }
 
 export default function StoreSweepDashboard() {
@@ -145,9 +168,7 @@ export default function StoreSweepDashboard() {
   const shopify = useAppBridge();
 
   const mainTheme = themes.find((theme) => theme.role === "MAIN") || themes[0];
-  const [selectedThemeId, setSelectedThemeId] = useState(
-    mainTheme?.id ?? null,
-  );
+  const [selectedThemeId, setSelectedThemeId] = useState(mainTheme?.id ?? null);
   const [scanResult, setScanResult] = useState(
     loaderData.lastScan
       ? {
@@ -212,7 +233,11 @@ export default function StoreSweepDashboard() {
     const data = startFetcher.data;
     if (!data) return;
 
-    if (data.success && data.startedAt && data.startedAt !== handledScanRef.current) {
+    if (
+      data.success &&
+      data.startedAt &&
+      data.startedAt !== handledScanRef.current
+    ) {
       handledScanRef.current = data.startedAt;
       pollThemeRef.current = data.themeId;
       pollFetcher.load(
@@ -302,7 +327,9 @@ export default function StoreSweepDashboard() {
     if (ignoreFetcher.data.success) {
       revalidator.revalidate();
     } else {
-      setErrorMessage(ignoreFetcher.data.error || "The ignore list change failed.");
+      setErrorMessage(
+        ignoreFetcher.data.error || "The ignore list change failed.",
+      );
     }
   }, [ignoreFetcher.data, revalidator]);
 
@@ -311,7 +338,11 @@ export default function StoreSweepDashboard() {
     setErrorMessage("");
     startFetcher.submit(
       { themeId },
-      { method: "POST", action: "/api/theme/scan", encType: "application/json" },
+      {
+        method: "POST",
+        action: "/api/theme/scan",
+        encType: "application/json",
+      },
     );
   };
 
@@ -422,7 +453,10 @@ export default function StoreSweepDashboard() {
   const unignore = (record) => {
     setErrorMessage("");
     ignoreFetcher.submit(
-      { intent: record.appName ? "unignore-app" : "unignore", id: record.id },
+      {
+        intent: record.type === "app" ? "unignore-app" : "unignore",
+        id: record.id,
+      },
       {
         method: "POST",
         action: "/api/findings/ignore",
@@ -432,6 +466,7 @@ export default function StoreSweepDashboard() {
   };
 
   const progress = scanJob?.status === "running" ? scanJob.progress : null;
+  const totalIgnored = ignoredFindings.length + ignoredApps.length;
 
   return (
     <s-page heading="StoreSweep">
@@ -444,19 +479,21 @@ export default function StoreSweepDashboard() {
         Scan theme
       </s-button>
 
-      <s-section heading="Find leftover app code">
+      <s-section heading="Scan scope">
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            StoreSweep scans every text file in the selected theme for code
-            that may have been left behind by uninstalled apps. Scanning does
-            not change your store.
-          </s-paragraph>
+          <s-text color="subdued">
+            StoreSweep checks every text file in the selected theme for code
+            left behind by uninstalled apps. Scanning never changes your
+            store.
+          </s-text>
           {themes.length > 0 && (
             <s-stack direction="inline" gap="tight" flexWrap="wrap">
               {themes.map((theme) => (
                 <s-button
                   key={theme.id}
-                  variant={theme.id === selectedThemeId ? "primary" : "secondary"}
+                  variant={
+                    theme.id === selectedThemeId ? "primary" : "secondary"
+                  }
                   disabled={isBusy}
                   onClick={() => startScan(theme.id)}
                 >
@@ -519,13 +556,13 @@ export default function StoreSweepDashboard() {
               accessibilityLabel="Scanning the theme"
               size="large"
             />
-            <s-paragraph>
+            <s-text color="subdued">
               {progress
                 ? `Checked ${progress.filesScanned}${
                     progress.totalFiles ? ` of ${progress.totalFiles}` : ""
                   } files — ${progress.findingCount} findings so far.`
-                : "Fetching the theme file list..."}
-            </s-paragraph>
+                : "Fetching the theme file list…"}
+            </s-text>
           </s-stack>
         </s-section>
       )}
@@ -538,174 +575,215 @@ export default function StoreSweepDashboard() {
       )}
 
       {!scanRunning && !scanResult && (
-        <s-section heading="Ready to scan">
-          <s-paragraph>
-            Select a theme above to run a read-only scan. StoreSweep will show
-            anything it finds before making changes.
-          </s-paragraph>
-        </s-section>
-      )}
-
-      {scanResult && !scanRunning && (
-        <s-section heading={`Last scan${scanResult.createdAtLabel ? ` — ${scanResult.createdAtLabel}` : ""}`}>
+        <s-section heading="Ready when you are">
           <s-stack direction="block" gap="base">
-            <s-paragraph>
-              {scanResult.themeName ? `Theme: ${scanResult.themeName}. ` : ""}
-              {scanResult.fileCount} files checked.
-              {scanResult.ignoredCount > 0
-                ? ` ${scanResult.ignoredCount} matches hidden per your ignore list.`
-                : ""}
-            </s-paragraph>
-            {findings.length === 0 ? (
-              <s-banner
-                heading="No recognizable leftover code found"
-                tone="success"
-              >
-                StoreSweep did not find any known app signatures in this
-                theme.
-              </s-banner>
-            ) : (
-              <s-banner
-                heading={`${findings.length} possible leftover ${
-                  findings.length === 1 ? "block" : "blocks"
-                } found${newCount > 0 ? `, ${newCount} new` : ""}`}
-                tone="warning"
-              >
-                Select only code you recognize as belonging to an app you no
-                longer use. StoreSweep backs up every file before cleaning.
-              </s-banner>
-            )}
+            <s-text color="subdued">
+              Run a read-only scan to see anything apps may have left behind.
+              StoreSweep always shows you what it found before anything is
+              changed.
+            </s-text>
+            <s-button variant="primary" onClick={() => startScan(selectedThemeId)}>
+              Scan {mainTheme?.name || "your theme"}
+            </s-button>
           </s-stack>
         </s-section>
       )}
 
-      {scanResult && findings.length > 0 && !scanRunning && (
-        <s-section heading="Review scan results" padding="none">
-          <s-table>
-            <s-table-header-row>
-              <s-table-header>
-                <s-checkbox
-                  label="Select all"
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  disabled={isBusy}
-                  onChange={(event) =>
-                    toggleAll(event.currentTarget.checked)
-                  }
-                />
-              </s-table-header>
-              <s-table-header listSlot="primary">App or block</s-table-header>
-              <s-table-header listSlot="inline">Location</s-table-header>
-              <s-table-header listSlot="secondary">
-                Code preview
-              </s-table-header>
-            </s-table-header-row>
-
-            <s-table-body>
-              {findingsByFile.map(([filename, fileFindings]) =>
-                fileFindings.map((finding) => (
-                  <s-table-row key={finding.id}>
-                    <s-table-cell>
-                      <s-checkbox
-                        label={`Select ${finding.appName}`}
-                        checked={selectedIds.has(finding.id)}
-                        disabled={isBusy}
-                        onChange={(event) =>
-                          toggleFinding(
-                            finding.id,
-                            event.currentTarget.checked,
-                          )
-                        }
-                      />
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="tight">
-                        <s-paragraph>
-                          {finding.appName}
-                          {finding.isNew ? " — NEW" : ""}
-                        </s-paragraph>
-                        <s-paragraph>
-                          {confidenceLabel(finding.confidence)}
-                        </s-paragraph>
-                        <s-stack direction="inline" gap="tight">
-                          <s-button
-                            disabled={isBusy}
-                            onClick={() => ignoreFinding(finding)}
-                          >
-                            Keep this code
-                          </s-button>
-                          <s-button
-                            disabled={isBusy}
-                            onClick={() => ignoreApp(finding.appName)}
-                          >
-                            Keep this app
-                          </s-button>
-                        </s-stack>
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="tight">
-                        <s-paragraph>{filename}</s-paragraph>
-                        <s-paragraph>
-                          {lineLabel(finding.lineNumbers)}
-                        </s-paragraph>
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-box
-                        padding="small"
-                        borderRadius="base"
-                        background="subdued"
-                      >
-                        <code>{codeSnippet(finding.matchedCode)}</code>
-                      </s-box>
-                    </s-table-cell>
-                  </s-table-row>
-                )),
-              )}
-            </s-table-body>
-          </s-table>
-
-          <s-box padding="base">
-            <s-stack direction="inline" gap="base" alignItems="center">
-              <s-button
-                variant="primary"
-                tone="critical"
-                disabled={
-                  selectedIds.size === 0 ||
-                  isBusy ||
-                  needsUpgrade ||
-                  upgradeRequired
-                }
-                onClick={cleanSelectedCode}
-                {...(isCleaning ? { loading: true } : {})}
+      {scanResult && !scanRunning && (
+        <>
+          <s-section
+            heading={`Scan results${
+              scanResult.themeName ? ` — ${scanResult.themeName}` : ""
+            }`}
+          >
+            <s-stack direction="block" gap="base">
+              <s-text color="subdued">
+                {scanResult.createdAtLabel
+                  ? `Completed ${scanResult.createdAtLabel}.`
+                  : ""}
+              </s-text>
+              <s-grid
+                gridTemplateColumns="repeat(4, 1fr)"
+                gap="base"
               >
-                Clean selected code
-              </s-button>
-              <s-paragraph>
-                {selectedIds.size === 0
-                  ? "Select at least one result to clean."
-                  : `${selectedIds.size} ${
-                      selectedIds.size === 1 ? "result" : "results"
-                    } selected. Server-side verification will re-check the theme before writing.`}
-              </s-paragraph>
+                <StatCard
+                  value={String(scanResult.fileCount)}
+                  label="Files scanned"
+                />
+                <StatCard
+                  value={String(findings.length)}
+                  label="Findings"
+                />
+                <StatCard
+                  value={String(newCount)}
+                  label="New since last scan"
+                />
+                <StatCard
+                  value={String(scanResult.ignoredCount || 0)}
+                  label="Hidden by ignore list"
+                />
+              </s-grid>
+              {findings.length === 0 ? (
+                <s-banner
+                  heading="No recognizable leftover code found"
+                  tone="success"
+                >
+                  StoreSweep did not find any known app signatures in this
+                  theme.
+                </s-banner>
+              ) : (
+                <s-banner
+                  heading={`${findings.length} possible leftover ${
+                    findings.length === 1 ? "block" : "blocks"
+                  }${newCount > 0 ? `, ${newCount} new` : ""}`}
+                  tone="warning"
+                >
+                  Select only code you recognize as belonging to an app you
+                  no longer use. Every file is backed up before anything is
+                  changed.
+                </s-banner>
+              )}
             </s-stack>
-          </s-box>
-        </s-section>
+          </s-section>
+
+          {findings.length > 0 && (
+            <s-section heading="Review findings" padding="none">
+              <s-table>
+                <s-table-header-row>
+                  <s-table-header>
+                    <s-checkbox
+                      label="Select all"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      disabled={isBusy}
+                      onChange={(event) =>
+                        toggleAll(event.currentTarget.checked)
+                      }
+                    />
+                  </s-table-header>
+                  <s-table-header listSlot="primary">
+                    App or block
+                  </s-table-header>
+                  <s-table-header listSlot="inline">Location</s-table-header>
+                  <s-table-header listSlot="secondary">
+                    Code preview
+                  </s-table-header>
+                </s-table-header-row>
+
+                <s-table-body>
+                  {findingsByFile.map(([filename, fileFindings]) =>
+                    fileFindings.map((finding) => {
+                      const badge = confidenceBadge(finding.confidence);
+                      return (
+                        <s-table-row key={finding.id}>
+                          <s-table-cell>
+                            <s-checkbox
+                              label={`Select ${finding.appName}`}
+                              checked={selectedIds.has(finding.id)}
+                              disabled={isBusy}
+                              onChange={(event) =>
+                                toggleFinding(
+                                  finding.id,
+                                  event.currentTarget.checked,
+                                )
+                              }
+                            />
+                          </s-table-cell>
+                          <s-table-cell>
+                            <s-stack direction="block" gap="tight">
+                              <s-stack direction="inline" gap="tight">
+                                <s-text type="strong">
+                                  {finding.appName}
+                                </s-text>
+                                {finding.isNew && (
+                                  <s-badge tone="warning">New</s-badge>
+                                )}
+                              </s-stack>
+                              <s-badge tone={badge.tone}>
+                                {badge.label}
+                              </s-badge>
+                              <s-stack direction="inline" gap="tight">
+                                <s-button
+                                  disabled={isBusy}
+                                  onClick={() => ignoreFinding(finding)}
+                                >
+                                  Keep this code
+                                </s-button>
+                                <s-button
+                                  disabled={isBusy}
+                                  onClick={() => ignoreApp(finding.appName)}
+                                >
+                                  Keep this app
+                                </s-button>
+                              </s-stack>
+                            </s-stack>
+                          </s-table-cell>
+                          <s-table-cell>
+                            <s-stack direction="block" gap="tight">
+                              <s-text type="strong">{filename}</s-text>
+                              <s-text color="subdued">
+                                {lineLabel(finding.lineNumbers)}
+                              </s-text>
+                            </s-stack>
+                          </s-table-cell>
+                          <s-table-cell>
+                            <s-box
+                              padding="small"
+                              borderRadius="base"
+                              background="subdued"
+                            >
+                              <code>{codeSnippet(finding.matchedCode)}</code>
+                            </s-box>
+                          </s-table-cell>
+                        </s-table-row>
+                      );
+                    }),
+                  )}
+                </s-table-body>
+              </s-table>
+
+              <s-box padding="base">
+                <s-stack direction="inline" gap="base" alignItems="center">
+                  <s-button
+                    variant="primary"
+                    tone="critical"
+                    disabled={
+                      selectedIds.size === 0 ||
+                      isBusy ||
+                      needsUpgrade ||
+                      upgradeRequired
+                    }
+                    onClick={cleanSelectedCode}
+                    {...(isCleaning ? { loading: true } : {})}
+                  >
+                    Clean selected code
+                  </s-button>
+                  <s-text color="subdued">
+                    {selectedIds.size === 0
+                      ? "Select at least one result to clean."
+                      : `${selectedIds.size} ${
+                          selectedIds.size === 1 ? "result" : "results"
+                        } selected. The theme is re-verified server-side before writing.`}
+                  </s-text>
+                </s-stack>
+              </s-box>
+            </s-section>
+          )}
+        </>
       )}
 
       {lastClean && (
         <s-section heading="Last cleaning run">
           <s-stack direction="block" gap="base">
-            <s-paragraph>
+            <s-text color="subdued">
               {lastClean.removedCount} code{" "}
               {lastClean.removedCount === 1 ? "block" : "blocks"} removed from{" "}
               {lastClean.filesChanged}{" "}
               {lastClean.filesChanged === 1 ? "file" : "files"} on{" "}
               {lastClean.createdAtLabel}. A full backup of every changed file
               was stored in your theme.
-            </s-paragraph>
-            <s-stack direction="inline" gap="base">
+            </s-text>
+            <s-stack direction="inline" gap="base" alignItems="center">
               <s-button
                 onClick={restoreLastClean}
                 disabled={isBusy || needsUpgrade || upgradeRequired}
@@ -713,30 +791,32 @@ export default function StoreSweepDashboard() {
               >
                 Restore last cleaning run
               </s-button>
-              <s-paragraph>
-                Restoring copies the backed-up originals back over the cleaned
-                files.
-              </s-paragraph>
+              <s-text color="subdued">
+                Restoring copies the backed-up originals back over the
+                cleaned files.
+              </s-text>
             </s-stack>
           </s-stack>
         </s-section>
       )}
 
-      {(ignoredFindings.length > 0 || ignoredApps.length > 0) && (
-        <s-section
-          heading={`Ignore list (${ignoredFindings.length + ignoredApps.length})`}
-          padding="none"
-        >
+      {totalIgnored > 0 && (
+        <s-section heading={`Ignore list (${totalIgnored})`} padding="none">
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Ignored</s-table-header>
-              <s-table-header listSlot="inline">File</s-table-header>
+              <s-table-header listSlot="primary">App or block</s-table-header>
+              <s-table-header listSlot="inline">Scope</s-table-header>
               <s-table-header listSlot="secondary"> </s-table-header>
             </s-table-header-row>
             <s-table-body>
               {ignoredApps.map((record) => (
                 <s-table-row key={record.id}>
-                  <s-table-cell>{record.appName} (all files)</s-table-cell>
+                  <s-table-cell>
+                    <s-stack direction="inline" gap="tight">
+                      <s-text type="strong">{record.appName}</s-text>
+                      <s-badge tone="neutral">All matches</s-badge>
+                    </s-stack>
+                  </s-table-cell>
                   <s-table-cell>Every file</s-table-cell>
                   <s-table-cell>
                     <s-button disabled={isBusy} onClick={() => unignore(record)}>
@@ -747,7 +827,12 @@ export default function StoreSweepDashboard() {
               ))}
               {ignoredFindings.map((record) => (
                 <s-table-row key={record.id}>
-                  <s-table-cell>{record.appName}</s-table-cell>
+                  <s-table-cell>
+                    <s-stack direction="inline" gap="tight">
+                      <s-text type="strong">{record.appName}</s-text>
+                      <s-badge tone="neutral">Exact code</s-badge>
+                    </s-stack>
+                  </s-table-cell>
                   <s-table-cell>{record.filename}</s-table-cell>
                   <s-table-cell>
                     <s-button disabled={isBusy} onClick={() => unignore(record)}>
@@ -770,7 +855,10 @@ export function ErrorBoundary() {
   // Let Shopify's boundary handle thrown auth/OAuth responses (re-auth
   // redirects) and anything unexpected; render a recoverable page for
   // ordinary request errors.
-  if (!error || (typeof error === "object" && "status" in error && error.status >= 500)) {
+  if (
+    !error ||
+    (typeof error === "object" && "status" in error && error.status >= 500)
+  ) {
     return boundary.error(error);
   }
 

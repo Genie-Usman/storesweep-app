@@ -54,7 +54,9 @@ export const loader = async ({ request }) => {
       fileCount: scan.fileCount,
       findingCount: scan.findingCount,
       durationSeconds:
-        scan.durationMs === null ? null : Math.round(scan.durationMs / 100) / 10,
+        scan.durationMs === null
+          ? null
+          : Math.round(scan.durationMs / 100) / 10,
     })),
     cleanOperations: cleanOperations.map((operation) => ({
       id: operation.id,
@@ -66,16 +68,16 @@ export const loader = async ({ request }) => {
   };
 };
 
-function statusLabel(status) {
+function statusBadge(status) {
   switch (status) {
     case "completed":
-      return "Completed";
+      return { tone: "success", label: "Completed" };
     case "restored":
-      return "Restored after cleaning";
+      return { tone: "info", label: "Restored" };
     case "failed":
-      return "Failed";
+      return { tone: "critical", label: "Failed" };
     default:
-      return status;
+      return { tone: "neutral", label: status };
   }
 }
 
@@ -97,10 +99,9 @@ export default function StoreSweepHistory() {
       );
       revalidator.revalidate();
     } else {
-      shopify.toast.show(
-        restoreFetcher.data.error || "Restore failed.",
-        { isError: true },
-      );
+      shopify.toast.show(restoreFetcher.data.error || "Restore failed.", {
+        isError: true,
+      });
     }
   }, [restoreFetcher.data, revalidator, shopify]);
 
@@ -117,34 +118,47 @@ export default function StoreSweepHistory() {
 
   return (
     <s-page heading="History">
-      <s-section heading={`Recent scans (${scans.length})`} padding="none">
+      <s-section
+        heading={`Scans (${scans.length})`}
+        padding={scans.length === 0 ? undefined : "none"}
+      >
         {scans.length === 0 ? (
-          <s-box padding="base">
-            <s-paragraph>
-              No scans yet. Run your first scan from the dashboard.
-            </s-paragraph>
-          </s-box>
+          <s-text color="subdued">
+            No scans yet. Run your first scan from the dashboard.
+          </s-text>
         ) : (
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">When</s-table-header>
               <s-table-header listSlot="inline">Theme</s-table-header>
-              <s-table-header listSlot="inline">Files checked</s-table-header>
-              <s-table-header listSlot="secondary">
-                Findings
-              </s-table-header>
+              <s-table-header listSlot="inline">Files</s-table-header>
+              <s-table-header listSlot="secondary">Findings</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {scans.map((scan) => (
                 <s-table-row key={scan.id}>
-                  <s-table-cell>{scan.createdAtLabel}</s-table-cell>
+                  <s-table-cell>
+                    <s-text type="strong">{scan.createdAtLabel}</s-text>
+                  </s-table-cell>
                   <s-table-cell>{scan.themeName}</s-table-cell>
                   <s-table-cell>{scan.fileCount}</s-table-cell>
                   <s-table-cell>
-                    {scan.findingCount}
-                    {scan.durationSeconds !== null
-                      ? ` (in ${scan.durationSeconds}s)`
-                      : ""}
+                    <s-stack direction="inline" gap="tight" alignItems="center">
+                      {scan.findingCount > 0 ? (
+                        <s-badge
+                          tone={scan.findingCount > 0 ? "warning" : "success"}
+                        >
+                          {scan.findingCount}
+                        </s-badge>
+                      ) : (
+                        <s-badge tone="success">Clear</s-badge>
+                      )}
+                      {scan.durationSeconds !== null && (
+                        <s-text color="subdued">
+                          in {scan.durationSeconds}s
+                        </s-text>
+                      )}
+                    </s-stack>
                   </s-table-cell>
                 </s-table-row>
               ))}
@@ -154,54 +168,52 @@ export default function StoreSweepHistory() {
       </s-section>
 
       <s-section
-        heading={`Recent cleaning runs (${cleanOperations.length})`}
-        padding="none"
+        heading={`Cleaning runs (${cleanOperations.length})`}
+        padding={cleanOperations.length === 0 ? undefined : "none"}
       >
         {cleanOperations.length === 0 ? (
-          <s-box padding="base">
-            <s-paragraph>
-              Nothing has been cleaned yet. StoreSweep records every cleaning
-              run here so you can review or restore it later.
-            </s-paragraph>
-          </s-box>
+          <s-text color="subdued">
+            Nothing has been cleaned yet. Every cleaning run is recorded here
+            so you can review or restore it later.
+          </s-text>
         ) : (
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">When</s-table-header>
               <s-table-header listSlot="inline">Status</s-table-header>
-              <s-table-header listSlot="secondary">
-                Changes
-              </s-table-header>
+              <s-table-header listSlot="secondary">Changes</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {cleanOperations.map((operation) => (
-                <s-table-row key={operation.id}>
-                  <s-table-cell>{operation.createdAtLabel}</s-table-cell>
-                  <s-table-cell>
-                    {statusLabel(operation.status)}
-                  </s-table-cell>
-                  <s-table-cell>
-                    {operation.removedCount} blocks across{" "}
-                    {operation.filesChanged}{" "}
-                    {operation.filesChanged === 1 ? "file" : "files"}
-                    {operation.status === "completed" && (
+              {cleanOperations.map((operation) => {
+                const badge = statusBadge(operation.status);
+                return (
+                  <s-table-row key={operation.id}>
+                    <s-table-cell>
+                      <s-text type="strong">{operation.createdAtLabel}</s-text>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-badge tone={badge.tone}>{badge.label}</s-badge>
+                    </s-table-cell>
+                    <s-table-cell>
                       <s-stack direction="block" gap="tight">
-                        <s-button
-                          disabled={isRestoring}
-                          {...(restoreFetcher.state !== "idle" &&
-                          restoreFetcher.json?.cleanOperationId ===
-                            operation.id
-                            ? { loading: true }
-                            : {})}
-                          onClick={() => restoreOperation(operation)}
-                        >
-                          Restore
-                        </s-button>
+                        <s-text>
+                          {operation.removedCount} blocks across{" "}
+                          {operation.filesChanged}{" "}
+                          {operation.filesChanged === 1 ? "file" : "files"}
+                        </s-text>
+                        {operation.status === "completed" && (
+                          <s-button
+                            disabled={isRestoring}
+                            onClick={() => restoreOperation(operation)}
+                          >
+                            Restore
+                          </s-button>
+                        )}
                       </s-stack>
-                    )}
-                  </s-table-cell>
-                </s-table-row>
-              ))}
+                    </s-table-cell>
+                  </s-table-row>
+                );
+              })}
             </s-table-body>
           </s-table>
         )}

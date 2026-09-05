@@ -90,9 +90,27 @@ Database tables are created with `npm run setup`
 
 ## Notes
 
-- Cleaning requires the `write_themes` scope; Shopify additionally requires
-  the developer to be approved for [protected theme-file access](https://shopify.dev/docs/apps/launch/protected-customer-data)
-  before `themeFilesUpsert` calls succeed. The dashboard surfaces this
-  state with a link to Shopify's exemption request form.
-- The in-memory rate limiter is per-instance; swap it for Redis when
-  running multiple instances (see docs/ARCHITECTURE.md).
+### Before you ship
+
+1. **Protected theme-file access.** Cleaning requires the `write_themes`
+   scope plus Shopify's approval of the developer's
+   [protected theme-file access exemption](https://docs.google.com/forms/d/e/1FAIpQLSfZTB1vxFC5d1-GPdqYunWRGUoDcOheHQzfK2RoEFEHrknt5g/viewform).
+   Approval can take weeks — submit the form early. The dashboard surfaces
+   this state with a link to the form.
+2. **Live smoke test.** Unit tests run against fakes; run
+   `shopify app dev` against a development store and exercise a full
+   scan → clean → restore cycle on a copy of a real theme before
+   deploying. The GraphQL operations are already validated against the
+   Admin 2026-07 schema via `npm run graphql-codegen`.
+3. **Billing (optional).** Set `BILLING_ENABLED=true` in production to
+   require the Pro subscription ($9.99/30 days, 7-day trial) for cleaning
+   and restoring. Without the flag, everything is free.
+4. **API versions.** Admin calls and webhooks both target `2026-07`
+   (`ApiVersion.July26`); bump both together when upgrading.
+
+### Single vs. multi-instance
+
+The in-memory rate limiter is per-instance; swap it for Redis when running
+multiple instances (see docs/ARCHITECTURE.md). SQLite works for a single
+instance; switch the Prisma datasource to Postgres for multi-instance
+deployments.

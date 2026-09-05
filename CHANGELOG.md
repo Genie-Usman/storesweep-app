@@ -1,5 +1,21 @@
 # StoreSweep
 
+## 2026.09.05 — Monetization and merchant controls
+
+- Shopify Billing: optional Pro plan ($9.99/30 days, 7-day trial,
+  `BILLING_ENABLED=true`) gating cleaning and restoring; scanning stays
+  free; `/app/billing` starts the subscription flow
+- Ignore list: merchants can keep specific code ("Keep this code") so
+  scans stop surfacing it; identity is filename + app + code hash, so
+  ignores survive unrelated file edits; manage from the dashboard
+- GraphQL throttling: all Admin API calls retry THROTTLED/429 with
+  exponential backoff
+- Restore any cleaning run from the History page (previously last-only)
+- API versions aligned to 2026-07 across server and webhooks
+- GraphQL operations validated against the live Admin 2026-07 schema via
+  graphql-codegen (generated types gitignored)
+- Research CSV moved to `docs/research/apps_by_usage.csv`
+
 ## 2026.09.03 — Enterprise hardening (Phase 2)
 
 - Scan the entire published theme (all liquid/JSON text files via paginated

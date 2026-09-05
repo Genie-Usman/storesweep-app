@@ -30,3 +30,8 @@ database.sqlite
 .react-router/
 # Generated GraphQL types (npm run graphql-codegen)
 /app/types/
+
+# Local debugging artifacts
+/jobs.json
+/runs.json
+/logs.txt

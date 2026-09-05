@@ -22,7 +22,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
 
   if (request.method !== "POST") {
-    return errorResponse("Method not allowed.", 405);
+    return errorResponse("Method not allowed.");
   }
 
   const limited = enforceRateLimit("clean", shop);
@@ -81,7 +81,7 @@ export const action = async ({ request }) => {
     return jsonResponse({ success: true, ...result });
   } catch (error) {
     if (error instanceof ThemeChangedError) {
-      return errorResponse(error.message, 409, { code: "THEME_CHANGED" });
+      return errorResponse(error.message, { code: "THEME_CHANGED" });
     }
 
     if (isThemeWriteAccessError(error)) {

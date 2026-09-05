@@ -14,7 +14,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
 
   if (request.method !== "POST") {
-    return errorResponse("Method not allowed.", 405);
+    return errorResponse("Method not allowed.");
   }
 
   const limited = enforceRateLimit("ignore", shop);
@@ -56,7 +56,7 @@ export const action = async ({ request }) => {
 
     const existing = await db.ignoredApp.findFirst({ where: { id, shop } });
     if (!existing) {
-      return errorResponse("Ignored app was not found.", 404);
+      return errorResponse("Ignored app was not found.");
     }
 
     await db.ignoredApp.delete({ where: { id: existing.id } });
@@ -78,7 +78,7 @@ export const action = async ({ request }) => {
       where: { id, shop },
     });
     if (!existing) {
-      return errorResponse("Ignored finding was not found.", 404);
+      return errorResponse("Ignored finding was not found.");
     }
 
     await db.ignoredFinding.delete({ where: { id: existing.id } });

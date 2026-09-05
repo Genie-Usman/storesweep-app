@@ -27,7 +27,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
 
   if (request.method !== "POST") {
-    return errorResponse("Method not allowed.", 405);
+    return errorResponse("Method not allowed.");
   }
 
   const limited = enforceRateLimit("scan", shop);

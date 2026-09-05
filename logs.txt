@@ -1,0 +1,217 @@
+﻿2026-09-05T20:09:32.1940995Z Current runner version: '2.337.0'
+2026-09-05T20:09:32.1967740Z ##[group]Runner Image Provisioner
+2026-09-05T20:09:32.1968601Z Hosted Compute Agent
+2026-09-05T20:09:32.1969276Z Version: 20260828.587
+2026-09-05T20:09:32.1969980Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-05T20:09:32.1970736Z Build Date: 2026-08-28T16:44:25Z
+2026-09-05T20:09:32.1971535Z Worker ID: {070366ec-1bf0-4ea8-bca3-5c43368685ec}
+2026-09-05T20:09:32.1972305Z Azure Region: canadacentral
+2026-09-05T20:09:32.1973429Z ##[endgroup]
+2026-09-05T20:09:32.1975080Z ##[group]Operating System
+2026-09-05T20:09:32.1975717Z Ubuntu
+2026-09-05T20:09:32.1976331Z 24.04.4
+2026-09-05T20:09:32.1976872Z LTS
+2026-09-05T20:09:32.1977376Z ##[endgroup]
+2026-09-05T20:09:32.1978036Z ##[group]Runner Image
+2026-09-05T20:09:32.1978650Z Image: ubuntu-24.04
+2026-09-05T20:09:32.1979317Z Version: 20260831.293.1
+2026-09-05T20:09:32.1980590Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260831.293/images/ubuntu/Ubuntu2404-Readme.md
+2026-09-05T20:09:32.1982241Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293
+2026-09-05T20:09:32.1983644Z ##[endgroup]
+2026-09-05T20:09:32.1984972Z ##[group]GITHUB_TOKEN Permissions
+2026-09-05T20:09:32.1987288Z Contents: read
+2026-09-05T20:09:32.1988405Z Metadata: read
+2026-09-05T20:09:32.1988980Z Packages: read
+2026-09-05T20:09:32.1989531Z ##[endgroup]
+2026-09-05T20:09:32.1994058Z Secret source: Actions
+2026-09-05T20:09:32.1996235Z Prepare workflow directory
+2026-09-05T20:09:32.2494461Z Prepare all required actions
+2026-09-05T20:09:32.2625525Z Getting action download info
+2026-09-05T20:09:32.4803902Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-09-05T20:09:32.5860752Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-09-05T20:09:32.8333243Z Complete job name: verify
+2026-09-05T20:09:32.9358724Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-05T20:09:32.9370441Z ##[group]Run actions/checkout@v4
+2026-09-05T20:09:32.9371285Z with:
+2026-09-05T20:09:32.9371808Z   repository: Genie-Usman/storesweep-app
+2026-09-05T20:09:32.9376321Z   token: ***
+2026-09-05T20:09:32.9376770Z   ssh-strict: true
+2026-09-05T20:09:32.9377222Z   ssh-user: git
+2026-09-05T20:09:32.9377691Z   persist-credentials: true
+2026-09-05T20:09:32.9378188Z   clean: true
+2026-09-05T20:09:32.9378645Z   sparse-checkout-cone-mode: true
+2026-09-05T20:09:32.9379173Z   fetch-depth: 1
+2026-09-05T20:09:32.9379617Z   fetch-tags: false
+2026-09-05T20:09:32.9380062Z   show-progress: true
+2026-09-05T20:09:32.9380515Z   lfs: false
+2026-09-05T20:09:32.9381022Z   submodules: false
+2026-09-05T20:09:32.9381494Z   set-safe-directory: true
+2026-09-05T20:09:32.9382037Z   allow-unsafe-pr-checkout: false
+2026-09-05T20:09:32.9383059Z ##[endgroup]
+2026-09-05T20:09:33.0548398Z Syncing repository: Genie-Usman/storesweep-app
+2026-09-05T20:09:33.0550895Z ##[group]Getting Git version info
+2026-09-05T20:09:33.0551761Z Working directory is '/home/runner/work/storesweep-app/storesweep-app'
+2026-09-05T20:09:33.0553374Z [command]/usr/bin/git version
+2026-09-05T20:09:33.0620657Z git version 2.55.0
+2026-09-05T20:09:33.0660396Z ##[endgroup]
+2026-09-05T20:09:33.0689227Z Temporarily overriding HOME='/home/runner/work/_temp/8328146e-c5c8-4f2e-86f2-7fed48501b74' before making global git config changes
+2026-09-05T20:09:33.0691730Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-05T20:09:33.0700676Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/storesweep-app/storesweep-app
+2026-09-05T20:09:33.0803245Z Deleting the contents of '/home/runner/work/storesweep-app/storesweep-app'
+2026-09-05T20:09:33.0811547Z ##[group]Initializing the repository
+2026-09-05T20:09:33.0816331Z [command]/usr/bin/git init /home/runner/work/storesweep-app/storesweep-app
+2026-09-05T20:09:33.0940416Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-05T20:09:33.0942981Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-05T20:09:33.0945434Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-05T20:09:33.0947934Z hint: call:
+2026-09-05T20:09:33.0948824Z hint:
+2026-09-05T20:09:33.0949992Z hint: 	git config --global init.defaultBranch <name>
+2026-09-05T20:09:33.0951044Z hint:
+2026-09-05T20:09:33.0952014Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-05T20:09:33.0954062Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-05T20:09:33.0955453Z hint:
+2026-09-05T20:09:33.0956268Z hint: 	git branch -m <name>
+2026-09-05T20:09:33.0957062Z hint:
+2026-09-05T20:09:33.0958103Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-05T20:09:33.0959795Z Initialized empty Git repository in /home/runner/work/storesweep-app/storesweep-app/.git/
+2026-09-05T20:09:33.0961729Z [command]/usr/bin/git remote add origin https://github.com/Genie-Usman/storesweep-app
+2026-09-05T20:09:33.1009691Z ##[endgroup]
+2026-09-05T20:09:33.1011002Z ##[group]Disabling automatic garbage collection
+2026-09-05T20:09:33.1016142Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-05T20:09:33.1059560Z ##[endgroup]
+2026-09-05T20:09:33.1060964Z ##[group]Setting up auth
+2026-09-05T20:09:33.1067821Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-05T20:09:33.1117083Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-05T20:09:33.1511271Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-05T20:09:33.1557161Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-05T20:09:33.1809631Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-05T20:09:33.1851945Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-05T20:09:33.2115765Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-05T20:09:33.2169054Z ##[endgroup]
+2026-09-05T20:09:33.2171472Z ##[group]Fetching the repository
+2026-09-05T20:09:33.2181362Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +2049effdaa15cf8f785542ccc668afc6fbe00bc5:refs/remotes/origin/main
+2026-09-05T20:09:33.6537668Z From https://github.com/Genie-Usman/storesweep-app
+2026-09-05T20:09:33.6539883Z  * [new ref]         2049effdaa15cf8f785542ccc668afc6fbe00bc5 -> origin/main
+2026-09-05T20:09:33.6544230Z ##[endgroup]
+2026-09-05T20:09:33.6545167Z ##[group]Determining the checkout info
+2026-09-05T20:09:33.6548485Z ##[endgroup]
+2026-09-05T20:09:33.6556229Z [command]/usr/bin/git sparse-checkout disable
+2026-09-05T20:09:33.6624101Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-05T20:09:33.6666349Z ##[group]Checking out the ref
+2026-09-05T20:09:33.6671861Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-09-05T20:09:33.6854819Z Switched to a new branch 'main'
+2026-09-05T20:09:33.6858348Z branch 'main' set up to track 'origin/main'.
+2026-09-05T20:09:33.6865986Z ##[endgroup]
+2026-09-05T20:09:33.6917858Z [command]/usr/bin/git log -1 --format=%H
+2026-09-05T20:09:33.6948787Z 2049effdaa15cf8f785542ccc668afc6fbe00bc5
+2026-09-05T20:09:33.7270718Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-05T20:09:33.7273948Z ##[group]Run actions/setup-node@v4
+2026-09-05T20:09:33.7274484Z with:
+2026-09-05T20:09:33.7274901Z   node-version: 22
+2026-09-05T20:09:33.7275334Z   cache: npm
+2026-09-05T20:09:33.7275758Z   always-auth: false
+2026-09-05T20:09:33.7276220Z   check-latest: false
+2026-09-05T20:09:33.7279985Z   token: ***
+2026-09-05T20:09:33.7280425Z ##[endgroup]
+2026-09-05T20:09:33.8935085Z Found in cache @ /opt/hostedtoolcache/node/22.23.2/x64
+2026-09-05T20:09:33.8942319Z (node:2176) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-05T20:09:33.8944060Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-05T20:09:33.8945881Z ##[group]Environment details
+2026-09-05T20:09:34.3139009Z node: v22.23.2
+2026-09-05T20:09:34.3140683Z npm: 10.9.8
+2026-09-05T20:09:34.3141522Z yarn: 1.22.22
+2026-09-05T20:09:34.3143678Z ##[endgroup]
+2026-09-05T20:09:34.3194254Z [command]/opt/hostedtoolcache/node/22.23.2/x64/bin/npm config get cache
+2026-09-05T20:09:34.4355993Z /home/runner/.npm
+2026-09-05T20:09:34.5539100Z Cache hit for: node-cache-Linux-x64-npm-5db79956d720df59493bb57a0d538fae5095c154f70d64ec97336fcc5a4bed30
+2026-09-05T20:09:34.5675892Z (node:2176) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-09-05T20:09:35.6860117Z Received 96468992 of 155552426 (62.0%), 91.9 MBs/sec
+2026-09-05T20:09:36.2348356Z Received 155552426 of 155552426 (100.0%), 95.7 MBs/sec
+2026-09-05T20:09:36.2352545Z Cache Size: ~148 MB (155552426 B)
+2026-09-05T20:09:36.2477750Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a9960db6-f5d1-4e79-9aa6-b30b786859cd/cache.tzst -P -C /home/runner/work/storesweep-app/storesweep-app --use-compress-program unzstd
+2026-09-05T20:09:36.8112501Z Cache restored successfully
+2026-09-05T20:09:36.8216354Z Cache restored from key: node-cache-Linux-x64-npm-5db79956d720df59493bb57a0d538fae5095c154f70d64ec97336fcc5a4bed30
+2026-09-05T20:09:36.8465131Z ##[group]Run npm ci
+2026-09-05T20:09:36.8465608Z [36;1mnpm ci[0m
+2026-09-05T20:09:36.8905786Z shell: /usr/bin/bash -e {0}
+2026-09-05T20:09:36.8906152Z ##[endgroup]
+2026-09-05T20:09:40.8362378Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-09-05T20:09:41.0340633Z npm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead
+2026-09-05T20:09:41.0527393Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2026-09-05T20:09:41.1633840Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-09-05T20:09:41.3560548Z npm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead
+2026-09-05T20:09:41.8158491Z npm warn deprecated tsconfck@3.1.6: unmaintained
+2026-09-05T20:09:42.7068110Z npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+2026-09-05T20:09:44.1118602Z npm warn deprecated @graphql-tools/prisma-loader@8.0.17: This package was intended to be used with an older versions of Prisma.\nThe newer versions of Prisma has a different approach to GraphQL integration.\nTherefore, this package is no longer needed and has been deprecated and removed.\nLearn more: https://www.prisma.io/graphql
+2026-09-05T20:10:20.1734503Z npm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+2026-09-05T20:10:27.3967801Z 
+2026-09-05T20:10:27.3968677Z added 781 packages, and audited 782 packages in 50s
+2026-09-05T20:10:27.3971000Z 
+2026-09-05T20:10:27.3971429Z 185 packages are looking for funding
+2026-09-05T20:10:27.3972077Z   run `npm fund` for details
+2026-09-05T20:10:28.7960647Z 
+2026-09-05T20:10:28.7962261Z 38 vulnerabilities (4 moderate, 34 high)
+2026-09-05T20:10:28.7963152Z 
+2026-09-05T20:10:28.7963681Z To address issues that do not require attention, run:
+2026-09-05T20:10:28.7964355Z   npm audit fix
+2026-09-05T20:10:28.7964692Z 
+2026-09-05T20:10:28.7965542Z To address all issues (including breaking changes), run:
+2026-09-05T20:10:28.7966331Z   npm audit fix --force
+2026-09-05T20:10:28.7966641Z 
+2026-09-05T20:10:28.7966904Z Run `npm audit` for details.
+2026-09-05T20:10:28.9174426Z ##[group]Run npx prisma validate && npx prisma generate
+2026-09-05T20:10:28.9174925Z [36;1mnpx prisma validate && npx prisma generate[0m
+2026-09-05T20:10:28.9213643Z shell: /usr/bin/bash -e {0}
+2026-09-05T20:10:28.9213926Z ##[endgroup]
+2026-09-05T20:10:30.1369204Z Prisma schema loaded from prisma/schema.prisma
+2026-09-05T20:10:30.1546354Z ┌─────────────────────────────────────────────────────────┐
+2026-09-05T20:10:30.1547473Z │  Update available 6.19.3 -> 8.0.0-rc.13                 │
+2026-09-05T20:10:30.1548299Z │                                                         │
+2026-09-05T20:10:30.1549149Z │  This is a major update - please follow the guide at    │
+2026-09-05T20:10:30.1550105Z │  https://pris.ly/d/major-version-upgrade                │
+2026-09-05T20:10:30.1550930Z │                                                         │
+2026-09-05T20:10:30.1551965Z │  Run the following to update                            │
+2026-09-05T20:10:30.1553355Z │    npm i --save-dev prisma@latest                       │
+2026-09-05T20:10:30.1554324Z │    npm i @prisma/client@latest                          │
+2026-09-05T20:10:30.1555365Z └─────────────────────────────────────────────────────────┘
+2026-09-05T20:10:30.1556285Z The schema at prisma/schema.prisma is valid 🚀
+2026-09-05T20:10:31.3903700Z Prisma schema loaded from prisma/schema.prisma
+2026-09-05T20:10:31.6286493Z 
+2026-09-05T20:10:31.6288022Z ✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 120ms
+2026-09-05T20:10:31.6288623Z 
+2026-09-05T20:10:31.6289278Z Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+2026-09-05T20:10:31.6289815Z 
+2026-09-05T20:10:31.6290690Z Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+2026-09-05T20:10:31.6291434Z 
+2026-09-05T20:10:31.6743956Z ##[group]Run npm run lint
+2026-09-05T20:10:31.6744285Z [36;1mnpm run lint[0m
+2026-09-05T20:10:31.6782058Z shell: /usr/bin/bash -e {0}
+2026-09-05T20:10:31.6782353Z ##[endgroup]
+2026-09-05T20:10:31.7896570Z 
+2026-09-05T20:10:31.7897185Z > lint
+2026-09-05T20:10:31.7898278Z > eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .
+2026-09-05T20:10:31.7898999Z 
+2026-09-05T20:10:33.8694354Z 
+2026-09-05T20:10:33.8695232Z /home/runner/work/storesweep-app/storesweep-app/app/utils/api-helpers.server.js
+2026-09-05T20:10:33.8726178Z ##[error]  19:38  error  'status' is assigned a value but never used  no-unused-vars
+2026-09-05T20:10:33.8735697Z 
+2026-09-05T20:10:33.8736351Z ✖ 1 problem (1 error, 0 warnings)
+2026-09-05T20:10:33.8736617Z 
+2026-09-05T20:10:33.9066840Z ##[error]Process completed with exit code 1.
+2026-09-05T20:10:33.9235350Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-05T20:10:33.9236675Z Post job cleanup.
+2026-09-05T20:10:34.0218312Z [command]/usr/bin/git version
+2026-09-05T20:10:34.0268831Z git version 2.55.0
+2026-09-05T20:10:34.0317591Z Temporarily overriding HOME='/home/runner/work/_temp/70e3970a-4747-4e07-8de8-dbeffce44ae3' before making global git config changes
+2026-09-05T20:10:34.0319540Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-05T20:10:34.0324695Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/storesweep-app/storesweep-app
+2026-09-05T20:10:34.0374048Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-05T20:10:34.0416315Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-05T20:10:34.0694292Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-05T20:10:34.0725932Z http.https://github.com/.extraheader
+2026-09-05T20:10:34.0739001Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-05T20:10:34.0786146Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-05T20:10:34.1064860Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-05T20:10:34.1110824Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-05T20:10:34.1569884Z Cleaning up orphan processes
+2026-09-05T20:10:34.1925279Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

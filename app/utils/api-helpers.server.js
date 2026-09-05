@@ -16,7 +16,7 @@ export function jsonResponse(body, status = 200) {
  * the fetcher that made the request. Clients branch on `success` and the
  * machine-readable `code` (RATE_LIMITED, UPGRADE_REQUIRED, ...).
  */
-export function errorResponse(error, status = 400, extra = {}) {
+export function errorResponse(error, extra = {}) {
   return jsonResponse({ success: false, error, ...extra }, 200);
 }
 

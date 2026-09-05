@@ -22,7 +22,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
 
   if (request.method !== "POST") {
-    return errorResponse("Method not allowed.", 405);
+    return errorResponse("Method not allowed.");
   }
 
   const limited = enforceRateLimit("restore", shop);
@@ -50,7 +50,7 @@ export const action = async ({ request }) => {
     return jsonResponse({ success: true, ...result });
   } catch (error) {
     if (error instanceof RestoreError) {
-      return errorResponse(error.message, 409, { code: "RESTORE_BLOCKED" });
+      return errorResponse(error.message, { code: "RESTORE_BLOCKED" });
     }
 
     if (isThemeWriteAccessError(error)) {

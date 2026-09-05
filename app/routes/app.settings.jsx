@@ -39,7 +39,7 @@ function actionLabel(action) {
   }
 }
 
-function StatCard({ value, label }) {
+function statCard(value, label) {
   return (
     <s-grid-item>
       <s-box
@@ -100,12 +100,9 @@ export default function StoreSweepSettings() {
         <s-stack direction="block" gap="base">
           <s-text type="strong">{shop}</s-text>
           <s-grid gridTemplateColumns="repeat(3, 1fr)" gap="base">
-            <StatCard value={String(stats.scanCount)} label="Scans run" />
-            <StatCard value={String(stats.cleanCount)} label="Cleaning runs" />
-            <StatCard
-              value={stats.lastScanLabel || "—"}
-              label="Last scan"
-            />
+            {statCard(String(stats.scanCount), "Scans run")}
+            {statCard(String(stats.cleanCount), "Cleaning runs")}
+            {statCard(stats.lastScanLabel || "—", "Last scan")}
           </s-grid>
           {stats.firstSeenLabel && (
             <s-text color="subdued">

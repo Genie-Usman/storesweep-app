@@ -130,7 +130,7 @@ function confidenceBadge(confidence) {
   }
 }
 
-function StatCard({ value, label }) {
+function statCard(value, label) {
   return (
     <s-grid-item>
       <s-box
@@ -273,7 +273,7 @@ export default function StoreSweepDashboard() {
       setErrorMessage(data.error || "The theme scan failed.");
     }
     return undefined;
-  }, [pollFetcher.data, revalidator]);
+  }, [pollFetcher.data, pollFetcher, revalidator]);
 
   useEffect(() => {
     if (!cleanFetcher.data) return;
@@ -606,22 +606,10 @@ export default function StoreSweepDashboard() {
                 gridTemplateColumns="repeat(4, 1fr)"
                 gap="base"
               >
-                <StatCard
-                  value={String(scanResult.fileCount)}
-                  label="Files scanned"
-                />
-                <StatCard
-                  value={String(findings.length)}
-                  label="Findings"
-                />
-                <StatCard
-                  value={String(newCount)}
-                  label="New since last scan"
-                />
-                <StatCard
-                  value={String(scanResult.ignoredCount || 0)}
-                  label="Hidden by ignore list"
-                />
+                {statCard(String(scanResult.fileCount), "Files scanned")}
+                {statCard(String(findings.length), "Findings")}
+                {statCard(String(newCount), "New since last scan")}
+                {statCard(String(scanResult.ignoredCount || 0), "Hidden by ignore list")}
               </s-grid>
               {findings.length === 0 ? (
                 <s-banner

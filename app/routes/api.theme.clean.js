@@ -40,7 +40,7 @@ export const action = async ({ request }) => {
   const parsed = await readJsonBody(request);
   if (parsed.error) return errorResponse(parsed.error);
 
-  const { selectedFindingIds, fileChecksums, scanId } = parsed.body;
+  const { selectedFindingIds, fileChecksums, scanId, themeId } = parsed.body;
 
   if (
     !Array.isArray(selectedFindingIds) ||
@@ -48,6 +48,14 @@ export const action = async ({ request }) => {
     !selectedFindingIds.every((id) => typeof id === "string")
   ) {
     return errorResponse("Selected findings are required.");
+  }
+
+  if (
+    themeId !== undefined &&
+    themeId !== null &&
+    typeof themeId !== "string"
+  ) {
+    return errorResponse("themeId must be a string when provided.");
   }
 
   if (
@@ -64,6 +72,7 @@ export const action = async ({ request }) => {
       admin,
       db,
       shop,
+      themeId: typeof themeId === "string" ? themeId : null,
       scanId: typeof scanId === "string" ? scanId : null,
       selectedFindingIds,
       fileChecksums: fileChecksums ?? {},

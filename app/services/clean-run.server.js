@@ -1,4 +1,4 @@
-import { getMainTheme, listThemeTextFiles, backupThemeFile, writeThemeFile } from "./theme-api.server.js";
+import { getMainTheme, getTheme, listThemeTextFiles, backupThemeFile, writeThemeFile } from "./theme-api.server.js";
 import { waitForShopifyJob } from "./shopify-job.server.js";
 import { scanThemeFile } from "../utils/scanner.js";
 import { identifyFindings, removeFindings } from "../utils/findings.js";
@@ -20,6 +20,7 @@ export async function runClean({
   admin,
   db,
   shop,
+  themeId = null,
   scanId = null,
   selectedFindingIds,
   fileChecksums = {},
@@ -44,7 +45,9 @@ export async function runClean({
     detail: { selectedCount: uniqueSelectedIds.length, scanId },
   });
 
-  const theme = await getMainTheme(admin);
+  const theme = themeId
+    ? await getTheme(admin, themeId)
+    : await getMainTheme(admin);
   const files = await listThemeTextFiles(admin, theme.id);
 
   const liveFindingsById = new Map();
@@ -141,6 +144,7 @@ export async function runClean({
     data: {
       shop,
       scanId,
+      themeId: theme.id,
       status: "completed",
       removedCount: cleanedFiles.reduce((total, file) => total + file.removedCount, 0),
       filesChanged: cleanedFiles.length,

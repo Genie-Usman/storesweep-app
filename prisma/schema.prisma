@@ -41,12 +41,16 @@ model Shop {
   lastActiveAt  DateTime  @default(now())
   uninstalledAt DateTime?
   lastScanAt    DateTime?
+  /// Set by the themes/publish webhook so the dashboard can flag scans
+  /// taken before the current published theme went live.
+  lastThemePublishAt DateTime?
   scanCount     Int       @default(0)
   cleanCount    Int       @default(0)
   scans         Scan[]
   cleanOperations CleanOperation[]
   auditEvents   AuditEvent[]
   ignoredFindings IgnoredFinding[]
+  ignoredApps   IgnoredApp[]
 }
 
 /// One completed scan of the store's published theme.
@@ -72,9 +76,9 @@ model Scan {
 
 /// A single leftover-code match found during a scan.
 model ScanFinding {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   scanId      String
-  scan        Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scan        Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
   findingKey  String // stable key derived from filename + offsets
   filename    String
   appName     String
@@ -83,6 +87,9 @@ model ScanFinding {
   matchedCode String
   startLine   Int
   endLine     Int
+  /// True when the same finding (file + app + exact code) was not present
+  /// in the shop's previous scan for this theme.
+  isNew       Boolean @default(false)
 
   @@index([scanId])
   @@index([findingKey])
@@ -94,6 +101,9 @@ model CleanOperation {
   shop         String
   scanId       String?
   scan         Scan?    @relation(fields: [scanId], references: [id])
+  /// The theme the run modified; lets restore target the right theme even
+  /// if the shop's published theme changed afterwards.
+  themeId      String?
   status       String   @default("completed") // completed | failed | restored
   removedCount Int      @default(0)
   filesChanged Int      @default(0)
@@ -131,5 +141,18 @@ model IgnoredFinding {
   shopRef   Shop?    @relation(fields: [shop], references: [shop])
 
   @@unique([shop, filename, appName, codeHash])
+  @@index([shop])
+}
+
+/// Apps a merchant dismissed across every file and code variant, e.g.
+/// "stop flagging Klaviyo anywhere in this theme".
+model IgnoredApp {
+  id        String   @id @default(cuid())
+  shop      String
+  appName   String
+  createdAt DateTime @default(now())
+  shopRef   Shop?    @relation(fields: [shop], references: [shop])
+
+  @@unique([shop, appName])
   @@index([shop])
 }

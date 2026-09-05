@@ -1,5 +1,21 @@
 # StoreSweep
 
+## 2026.09.05 — Phase 3: scan experience
+
+- Background scans with progress polling: the dashboard starts a scan and
+  shows live progress ("42 of 180 files checked") instead of blocking on
+  one request (in-process job registry; swap for Redis when multi-instance)
+- Theme picker: scan any theme (draft or published), not just the live
+  one; cleaning and restoring target the scanned theme
+- New-findings diffing: each scan compares against the previous scan of
+  the same theme and flags new leftovers ("2 new"); new findings are
+  persisted (`ScanFinding.isNew`)
+- App-level ignores: "Keep this app" dismisses an app across every file
+  and code variant (`IgnoredApp`), alongside the existing per-code ignore
+- themes/publish webhook records publish time; the dashboard flags scans
+  taken before the theme last changed
+- `.env.example` documenting optional environment variables
+
 ## 2026.09.05 — Monetization and merchant controls
 
 - Shopify Billing: optional Pro plan ($9.99/30 days, 7-day trial,

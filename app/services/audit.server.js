@@ -26,11 +26,12 @@ export async function recordAudit(db, { shop, action, detail }) {
   }
 }
 
-export async function touchShop(db, shop, { scanCount = 0, cleanCount = 0, lastScanAt } = {}) {
+export async function touchShop(db, shop, { scanCount = 0, cleanCount = 0, lastScanAt, lastThemePublishAt } = {}) {
   const data = { lastActiveAt: new Date() };
   if (scanCount) data.scanCount = { increment: scanCount };
   if (cleanCount) data.cleanCount = { increment: cleanCount };
   if (lastScanAt) data.lastScanAt = lastScanAt;
+  if (lastThemePublishAt) data.lastThemePublishAt = lastThemePublishAt;
 
   await db.shop.upsert({
     where: { shop },

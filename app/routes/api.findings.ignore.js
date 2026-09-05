@@ -23,7 +23,51 @@ export const action = async ({ request }) => {
   const parsed = await readJsonBody(request);
   if (parsed.error) return errorResponse(parsed.error);
 
-  const { intent, id, finding } = parsed.body;
+  const { intent, id, finding, appName } = parsed.body;
+
+  if (intent === "ignore-app") {
+    if (typeof appName !== "string" || !appName.trim()) {
+      return errorResponse("An appName is required.");
+    }
+
+    const normalized = appName.trim();
+    const record = await db.ignoredApp.upsert({
+      where: { shop_appName: { shop, appName: normalized } },
+      update: {},
+      create: { shop, appName: normalized },
+    });
+
+    await recordAudit(db, {
+      shop,
+      action: "app.ignored",
+      detail: { appName: normalized },
+    });
+
+    return jsonResponse({
+      success: true,
+      ignoredApp: { id: record.id, appName: record.appName },
+    });
+  }
+
+  if (intent === "unignore-app") {
+    if (typeof id !== "string" || !id) {
+      return errorResponse("An ignored app id is required.");
+    }
+
+    const existing = await db.ignoredApp.findFirst({ where: { id, shop } });
+    if (!existing) {
+      return errorResponse("Ignored app was not found.", 404);
+    }
+
+    await db.ignoredApp.delete({ where: { id: existing.id } });
+    await recordAudit(db, {
+      shop,
+      action: "app.unignored",
+      detail: { appName: existing.appName },
+    });
+
+    return jsonResponse({ success: true });
+  }
 
   if (intent === "unignore") {
     if (typeof id !== "string" || !id) {

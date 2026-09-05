@@ -24,14 +24,19 @@ the system as of the enterprise hardening pass (Phase 2).
 ## Data flow
 
 ```
-Scan (read-only)
-  admin GraphQL: themes(roles: MAIN) -> theme.files (paginated, throttle-retried)
+Scan (read-only, background job)
+  POST /api/theme/scan { themeId? } -> startScanJob (deduped per shop+theme)
+  GET  /api/theme/scan?themeId=     -> poll job: running | completed | failed
+  -> getTheme (or MAIN) -> theme.files (paginated, throttle-retried)
   -> filter to .liquid/.json text files under 1MB (skip our backups)
-  -> scan each file against KNOWN_APP_SIGNATURES
-  -> drop findings matching the shop's ignore list (count them separately)
+  -> scan each file against KNOWN_APP_SIGNATURES, reporting progress
+     per file via the job registry
+  -> drop findings matching the shop's ignore list (per-code or per-app)
+  -> diff against the previous completed scan of the same theme:
+     exact-signature matches are kept, new ones flagged isNew
   -> persist Scan + ScanFinding rows, touch Shop counters, append AuditEvent
-  -> return findings (id, file, app, category, confidence, lines, code)
-     + per-file sha256 checksums; NO theme source
+  -> return findings (id, file, app, category, confidence, isNew, lines,
+     code) + per-file sha256 checksums; NO theme source
 
 Clean (mutating, server-authoritative, Pro-gated)
   client sends: selectedFindingIds, fileChecksums, scanId
@@ -61,9 +66,10 @@ Ignore / unignore
 
 | Module | Responsibility |
 | --- | --- |
-| `app/services/theme-api.server.js` | All Admin GraphQL theme I/O: theme lookup, paginated file listing, single-file read, text-file write, backup naming, throttle retry |
+| `app/services/theme-api.server.js` | All Admin GraphQL theme I/O: theme listing/lookup, paginated file listing, single-file read, text-file write, backup naming, throttle retry |
 | `app/services/shopify-job.server.js` | Polls Shopify async `job` objects to completion |
-| `app/services/scan-run.server.js` | Scan orchestration, ignore-list filtering, persistence |
+| `app/services/scan-run.server.js` | Scan orchestration, ignore filtering, scan-to-scan diffing, persistence |
+| `app/services/scan-jobs.server.js` | In-process background scan registry: start (deduped), poll, prune |
 | `app/services/clean-run.server.js` | Clean orchestration, conflict detection, backup-then-write |
 | `app/services/restore-run.server.js` | Restore orchestration |
 | `app/services/billing.server.js` | Pro subscription status, payment redirect, enable/disable flag |
@@ -115,6 +121,11 @@ outside production):
 
 ## Concurrency and scale
 
+- **Scan jobs** live in-process (`scan-jobs.server.js`): correct for the
+  single-instance deployment this schema targets, and the Scan table
+  remains the durable record either way. For multi-instance, move the
+  registry to Redis/BullMQ behind the same `startScanJob`/`getScanJob`
+  interface.
 - **Rate limiting** is a fixed window per shop per action (scan 10/min,
   clean 5/min, restore 5/min, ignore 30/min), in-memory per instance.
   Cleaning is further serialized by Shopify's own theme-file job queue. If

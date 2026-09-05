@@ -8,7 +8,7 @@ function graphqlResponse(data) {
   return { json: async () => ({ data }) };
 }
 
-function fakeDb({ ignored = [] } = {}) {
+function fakeDb({ ignored = [], ignoredApps = [], previousScan = null } = {}) {
   const created = {};
   return {
     created,
@@ -16,11 +16,18 @@ function fakeDb({ ignored = [] } = {}) {
     ignoredFinding: {
       findMany: async () => ignored,
     },
+    ignoredApp: {
+      findMany: async () => ignoredApps,
+    },
     scan: {
+      findFirst: async () => previousScan,
       create: async ({ data }) => {
         created.scan = data;
         return { id: "scan-1" };
       },
+    },
+    scanFinding: {
+      findMany: async () => previousScan?.findings ?? [],
     },
     shop: {
       upsert: async ({ where, update, create }) => {
@@ -129,4 +136,130 @@ test("findings matching the ignore list are hidden and counted", async () => {
   assert.equal(result.ignoredCount, 1);
   assert.equal(result.findings[0].appName, "Loox Product Reviews");
   assert.equal(db.created.scan.findingCount, 1);
+});
+
+function adminWithThemeAndFiles(files) {
+  return {
+    graphql: async (query) => {
+      if (/roles:\s*\[MAIN\]/.test(query)) {
+        return graphqlResponse({
+          themes: {
+            nodes: [{ id: "gid://shopify/OnlineStoreTheme/7", name: "Dawn" }],
+          },
+        });
+      }
+
+      if (/query StoreSweepTheme\b/.test(query)) {
+        return graphqlResponse({
+          theme: { id: "gid://shopify/OnlineStoreTheme/9", name: "Draft" },
+        });
+      }
+
+      return graphqlResponse({
+        theme: {
+          files: {
+            nodes: files.map(({ filename, content }) => ({
+              filename,
+              body: { content },
+            })),
+            pageInfo: { hasNextPage: false, endCursor: null },
+            userErrors: [],
+          },
+        },
+      });
+    },
+  };
+}
+
+const TIDIO_TAG = '<script src="https://code.tidio.co/key.js"></script>';
+
+test("flags findings as new when they were absent from the previous scan", async () => {
+  const previousFindings = [
+    {
+      filename: "layout/theme.liquid",
+      appName: "Loox Product Reviews",
+      matchedCode: "{% render 'loox_inline' %}",
+    },
+  ];
+  const db = fakeDb({
+    previousScan: { id: "scan-0", findings: previousFindings },
+  });
+  const admin = adminWithFiles([
+    {
+      filename: "layout/theme.liquid",
+      content: `${TIDIO_TAG}\n{% render 'loox_inline' %}`,
+    },
+  ]);
+
+  const result = await runScan({ admin, db, shop: "shop.example" });
+
+  assert.equal(result.findingCount, 2);
+  assert.equal(result.newCount, 1);
+  const persisted = db.created.scan.findings.create;
+  assert.equal(
+    persisted.find((finding) => finding.appName === "Tidio Live Chat").isNew,
+    true,
+  );
+  assert.equal(
+    persisted.find((finding) => finding.appName === "Loox Product Reviews")
+      .isNew,
+    false,
+  );
+});
+
+test("app-level ignores hide every match for an app", async () => {
+  const db = fakeDb({ ignoredApps: [{ id: "app-1", appName: "Tidio Live Chat" }] });
+  const admin = adminWithFiles([
+    {
+      filename: "layout/theme.liquid",
+      content: `${TIDIO_TAG}\n{% render 'loox_inline' %}`,
+    },
+  ]);
+
+  const result = await runScan({ admin, db, shop: "shop.example" });
+
+  assert.equal(result.findingCount, 1);
+  assert.equal(result.ignoredCount, 1);
+  assert.equal(result.findings[0].appName, "Loox Product Reviews");
+});
+
+test("reports progress after each file is scanned", async () => {
+  const progress = [];
+  const db = fakeDb();
+  const admin = adminWithFiles([
+    { filename: "layout/theme.liquid", content: TIDIO_TAG },
+    { filename: "templates/product.json", content: "{}" },
+  ]);
+
+  await runScan({
+    admin,
+    db,
+    shop: "shop.example",
+    onProgress: (snapshot) => progress.push({ ...snapshot }),
+  });
+
+  assert.deepEqual(
+    progress.map((step) => step.filesScanned),
+    [1, 2],
+  );
+  assert.equal(progress[1].totalFiles, 2);
+  assert.equal(progress[1].findingCount, 1);
+});
+
+test("scans an arbitrary theme when themeId is provided", async () => {
+  const db = fakeDb();
+  const admin = adminWithThemeAndFiles([
+    { filename: "sections/footer.liquid", content: TIDIO_TAG },
+  ]);
+
+  const result = await runScan({
+    admin,
+    db,
+    shop: "shop.example",
+    themeId: "gid://shopify/OnlineStoreTheme/9",
+  });
+
+  assert.equal(result.themeName, "Draft");
+  assert.equal(result.findingCount, 1);
+  assert.equal(db.created.scan.themeId, "gid://shopify/OnlineStoreTheme/9");
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -6,6 +6,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getSubscriptionStatus } from "../services/billing.server";
+import { getThemes } from "../services/theme-api.server";
+
+const POLL_INTERVAL_MS = 1500;
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -14,10 +17,10 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [lastScan, lastClean, ignoredFindings, subscription] =
+  const [lastScan, lastClean, ignoredFindings, ignoredApps, shopRecord, themes, subscription] =
     await Promise.all([
       db.scan.findFirst({
         where: { shop, status: "completed" },
@@ -35,6 +38,13 @@ export const loader = async ({ request }) => {
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
+      db.ignoredApp.findMany({
+        where: { shop },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      db.shop.findUnique({ where: { shop }, select: { lastThemePublishAt: true } }),
+      getThemes(admin).catch(() => []),
       getSubscriptionStatus(billing),
     ]);
 
@@ -44,7 +54,9 @@ export const loader = async ({ request }) => {
         ? null
         : {
             scanId: lastScan.id,
+            themeId: lastScan.themeId,
             themeName: lastScan.themeName,
+            createdAtISO: lastScan.createdAt.toISOString(),
             createdAtLabel: `${dateFormatter.format(lastScan.createdAt)} UTC`,
             fileCount: lastScan.fileCount,
             findingCount: lastScan.findingCount,
@@ -56,6 +68,7 @@ export const loader = async ({ request }) => {
               category: finding.category,
               confidence: finding.confidence,
               matchedCode: finding.matchedCode,
+              isNew: finding.isNew,
               lineNumbers: { start: finding.startLine, end: finding.endLine },
             })),
           },
@@ -73,6 +86,12 @@ export const loader = async ({ request }) => {
       filename: record.filename,
       appName: record.appName,
     })),
+    ignoredApps: ignoredApps.map((record) => ({
+      id: record.id,
+      appName: record.appName,
+    })),
+    lastThemePublishAt: shopRecord?.lastThemePublishAt?.toISOString() ?? null,
+    themes,
     billing: subscription,
   };
 };
@@ -103,22 +122,38 @@ function confidenceLabel(confidence) {
 
 export default function StoreSweepDashboard() {
   const loaderData = useLoaderData();
-  const { lastClean, ignoredFindings, billing } = loaderData;
-  const scanFetcher = useFetcher();
+  const {
+    lastClean,
+    ignoredFindings,
+    ignoredApps,
+    lastThemePublishAt,
+    themes,
+    billing,
+  } = loaderData;
+
+  const startFetcher = useFetcher();
+  const pollFetcher = useFetcher();
   const cleanFetcher = useFetcher();
   const restoreFetcher = useFetcher();
   const ignoreFetcher = useFetcher();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
 
+  const mainTheme = themes.find((theme) => theme.role === "MAIN") || themes[0];
+  const [selectedThemeId, setSelectedThemeId] = useState(
+    mainTheme?.id ?? null,
+  );
   const [scanResult, setScanResult] = useState(
     loaderData.lastScan
       ? {
           scanId: loaderData.lastScan.scanId,
+          themeId: loaderData.lastScan.themeId,
           themeName: loaderData.lastScan.themeName,
           createdAtLabel: loaderData.lastScan.createdAtLabel,
           fileCount: loaderData.lastScan.fileCount,
           findingCount: loaderData.lastScan.findingCount,
+          ignoredCount: 0,
+          newCount: 0,
           fileChecksums: loaderData.lastScan.fileChecksums,
           findings: loaderData.lastScan.findings,
         }
@@ -128,15 +163,24 @@ export default function StoreSweepDashboard() {
   const [errorMessage, setErrorMessage] = useState("");
   const [writeAccessRequired, setWriteAccessRequired] = useState(null);
   const [upgradeRequired, setUpgradeRequired] = useState(false);
+  const pollThemeRef = useRef(selectedThemeId);
+  const scanAnnouncedRef = useRef(false);
 
-  const isScanning = scanFetcher.state !== "idle";
+  const scanStarting = startFetcher.state !== "idle";
+  const scanJob = pollFetcher.data?.jobKey ? pollFetcher.data : null;
+  const scanRunning =
+    scanStarting || (scanJob ? scanJob.status === "running" : false);
   const isCleaning = cleanFetcher.state !== "idle";
   const isRestoring = restoreFetcher.state !== "idle";
   const isIgnoring = ignoreFetcher.state !== "idle";
-  const isBusy = isScanning || isCleaning || isRestoring || isIgnoring;
+  const isBusy = scanRunning || isCleaning || isRestoring || isIgnoring;
   const needsUpgrade = billing.enabled && !billing.subscribed;
 
   const findings = useMemo(() => scanResult?.findings || [], [scanResult]);
+  const newCount = useMemo(
+    () => findings.filter((finding) => finding.isNew).length,
+    [findings],
+  );
   const findingsByFile = useMemo(() => {
     const grouped = new Map();
     for (const finding of findings) {
@@ -150,17 +194,57 @@ export default function StoreSweepDashboard() {
     findings.length > 0 && selectedIds.size === findings.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
 
-  useEffect(() => {
-    if (!scanFetcher.data) return;
+  const scanStale = Boolean(
+    lastThemePublishAt &&
+      loaderData.lastScan &&
+      loaderData.lastScan.createdAtISO < lastThemePublishAt,
+  );
 
-    if (scanFetcher.data.success) {
-      setScanResult(scanFetcher.data);
+  // Start polling as soon as a scan job has been accepted.
+  useEffect(() => {
+    if (!startFetcher.data) return;
+
+    if (startFetcher.data.success) {
+      if (!scanAnnouncedRef.current) {
+        scanAnnouncedRef.current = true;
+        pollThemeRef.current = startFetcher.data.themeId;
+        pollFetcher.load(
+          `/api/theme/scan?themeId=${encodeURIComponent(startFetcher.data.themeId || "")}`,
+        );
+      }
+    } else {
+      scanAnnouncedRef.current = false;
+      setErrorMessage(startFetcher.data.error || "The theme scan failed.");
+    }
+  }, [startFetcher.data, pollFetcher]);
+
+  // Poll until the background job resolves, then adopt its result.
+  useEffect(() => {
+    const data = pollFetcher.data;
+    if (!data || !data.jobKey) return undefined;
+
+    if (data.status === "running") {
+      const timer = setTimeout(
+        () =>
+          pollFetcher.load(
+            `/api/theme/scan?themeId=${encodeURIComponent(pollThemeRef.current || "")}`,
+          ),
+        POLL_INTERVAL_MS,
+      );
+      return () => clearTimeout(timer);
+    }
+
+    scanAnnouncedRef.current = false;
+    if (data.status === "completed" && data.result) {
+      setScanResult(data.result);
       setSelectedIds(new Set());
       setErrorMessage("");
-    } else {
-      setErrorMessage(scanFetcher.data.error || "The theme scan failed.");
+      revalidator.revalidate();
+    } else if (data.status === "failed") {
+      setErrorMessage(data.error || "The theme scan failed.");
     }
-  }, [scanFetcher.data]);
+    return undefined;
+  }, [pollFetcher.data, pollFetcher, revalidator]);
 
   useEffect(() => {
     if (!cleanFetcher.data) return;
@@ -177,7 +261,7 @@ export default function StoreSweepDashboard() {
       setWriteAccessRequired(null);
       setUpgradeRequired(false);
       revalidator.revalidate();
-      scanFetcher.load("/api/theme/scan");
+      setScanResult(null);
     } else if (cleanFetcher.data.code === "THEME_WRITE_ACCESS_REQUIRED") {
       setWriteAccessRequired({
         message: cleanFetcher.data.error,
@@ -190,7 +274,7 @@ export default function StoreSweepDashboard() {
     } else {
       setErrorMessage(cleanFetcher.data.error || "Theme cleaning failed.");
     }
-  }, [cleanFetcher.data, scanFetcher, shopify, revalidator]);
+  }, [cleanFetcher.data, shopify, revalidator]);
 
   useEffect(() => {
     if (!restoreFetcher.data) return;
@@ -203,11 +287,10 @@ export default function StoreSweepDashboard() {
       );
       setErrorMessage("");
       revalidator.revalidate();
-      scanFetcher.load("/api/theme/scan");
     } else {
       setErrorMessage(restoreFetcher.data.error || "Restore failed.");
     }
-  }, [restoreFetcher.data, scanFetcher, shopify, revalidator]);
+  }, [restoreFetcher.data, shopify, revalidator]);
 
   useEffect(() => {
     if (!ignoreFetcher.data) return;
@@ -219,9 +302,14 @@ export default function StoreSweepDashboard() {
     }
   }, [ignoreFetcher.data, revalidator]);
 
-  const scanTheme = () => {
+  const startScan = (themeId) => {
+    setSelectedThemeId(themeId);
     setErrorMessage("");
-    scanFetcher.load("/api/theme/scan");
+    scanAnnouncedRef.current = false;
+    startFetcher.submit(
+      { themeId },
+      { method: "POST", action: "/api/theme/scan", encType: "application/json" },
+    );
   };
 
   const toggleFinding = (findingId, checked) => {
@@ -248,6 +336,7 @@ export default function StoreSweepDashboard() {
         selectedFindingIds: [...selectedIds],
         fileChecksums: scanResult.fileChecksums || {},
         scanId: scanResult.scanId,
+        themeId: scanResult.themeId,
       },
       {
         method: "POST",
@@ -287,7 +376,6 @@ export default function StoreSweepDashboard() {
         encType: "application/json",
       },
     );
-    // Hide the row immediately; the server filter catches up on the next scan.
     setScanResult((current) =>
       current
         ? {
@@ -305,10 +393,33 @@ export default function StoreSweepDashboard() {
     });
   };
 
-  const unignoreFinding = (record) => {
+  const ignoreApp = (name) => {
     setErrorMessage("");
     ignoreFetcher.submit(
-      { intent: "unignore", id: record.id },
+      { intent: "ignore-app", appName: name },
+      {
+        method: "POST",
+        action: "/api/findings/ignore",
+        encType: "application/json",
+      },
+    );
+    setScanResult((current) =>
+      current
+        ? {
+            ...current,
+            findings: current.findings.filter(
+              (candidate) => candidate.appName !== name,
+            ),
+          }
+        : current,
+    );
+    setSelectedIds(new Set());
+  };
+
+  const unignore = (record) => {
+    setErrorMessage("");
+    ignoreFetcher.submit(
+      { intent: record.appName ? "unignore-app" : "unignore", id: record.id },
       {
         method: "POST",
         action: "/api/findings/ignore",
@@ -317,27 +428,41 @@ export default function StoreSweepDashboard() {
     );
   };
 
+  const progress = scanJob?.status === "running" ? scanJob.progress : null;
+
   return (
     <s-page heading="StoreSweep">
       <s-button
         slot="primary-action"
-        onClick={scanTheme}
-        {...(isBusy ? { loading: true } : {})}
+        onClick={() => startScan(selectedThemeId)}
+        disabled={scanRunning}
+        {...(scanStarting ? { loading: true } : {})}
       >
-        Scan live theme
+        Scan theme
       </s-button>
 
       <s-section heading="Find leftover app code">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            StoreSweep scans every text file in your published theme for code
+            StoreSweep scans every text file in the selected theme for code
             that may have been left behind by uninstalled apps. Scanning does
             not change your store.
           </s-paragraph>
-          <s-paragraph>
-            Review every match before cleaning. A detected app may still be
-            installed or intentionally used by your theme.
-          </s-paragraph>
+          {themes.length > 0 && (
+            <s-stack direction="inline" gap="tight" flexWrap="wrap">
+              {themes.map((theme) => (
+                <s-button
+                  key={theme.id}
+                  variant={theme.id === selectedThemeId ? "primary" : "secondary"}
+                  disabled={isBusy}
+                  onClick={() => startScan(theme.id)}
+                >
+                  {theme.name}
+                  {theme.role === "MAIN" ? " (live)" : ""}
+                </s-button>
+              ))}
+            </s-stack>
+          )}
         </s-stack>
       </s-section>
 
@@ -384,36 +509,45 @@ export default function StoreSweepDashboard() {
         </s-banner>
       )}
 
-      {isScanning && (
-        <s-section heading="Scanning your live theme">
+      {scanRunning && (
+        <s-section heading={progress ? "Scanning theme files" : "Starting scan"}>
           <s-stack direction="inline" gap="base" alignItems="center">
             <s-spinner
-              accessibilityLabel="Scanning the live theme"
+              accessibilityLabel="Scanning the theme"
               size="large"
             />
             <s-paragraph>
-              Checking every theme file for recognizable leftover app code...
+              {progress
+                ? `Checked ${progress.filesScanned}${
+                    progress.totalFiles ? ` of ${progress.totalFiles}` : ""
+                  } files — ${progress.findingCount} findings so far.`
+                : "Fetching the theme file list..."}
             </s-paragraph>
           </s-stack>
         </s-section>
       )}
 
-      {!isScanning && !scanResult && (
+      {scanStale && !scanRunning && (
+        <s-banner heading="This theme changed since your last scan" tone="info">
+          The theme was published after your most recent scan. Scan again for
+          fresh results.
+        </s-banner>
+      )}
+
+      {!scanRunning && !scanResult && (
         <s-section heading="Ready to scan">
           <s-paragraph>
-            Select &quot;Scan live theme&quot; to run a read-only check.
-            StoreSweep will show anything it finds before making changes.
+            Select a theme above to run a read-only scan. StoreSweep will show
+            anything it finds before making changes.
           </s-paragraph>
         </s-section>
       )}
 
-      {scanResult && !isScanning && (
+      {scanResult && !scanRunning && (
         <s-section heading={`Last scan${scanResult.createdAtLabel ? ` — ${scanResult.createdAtLabel}` : ""}`}>
           <s-stack direction="block" gap="base">
             <s-paragraph>
-              {scanResult.themeName
-                ? `Theme: ${scanResult.themeName}. `
-                : ""}
+              {scanResult.themeName ? `Theme: ${scanResult.themeName}. ` : ""}
               {scanResult.fileCount} files checked.
               {scanResult.ignoredCount > 0
                 ? ` ${scanResult.ignoredCount} matches hidden per your ignore list.`
@@ -424,14 +558,14 @@ export default function StoreSweepDashboard() {
                 heading="No recognizable leftover code found"
                 tone="success"
               >
-                StoreSweep did not find any known app signatures in your
-                published theme.
+                StoreSweep did not find any known app signatures in this
+                theme.
               </s-banner>
             ) : (
               <s-banner
                 heading={`${findings.length} possible leftover ${
                   findings.length === 1 ? "block" : "blocks"
-                } found`}
+                } found${newCount > 0 ? `, ${newCount} new` : ""}`}
                 tone="warning"
               >
                 Select only code you recognize as belonging to an app you no
@@ -442,9 +576,9 @@ export default function StoreSweepDashboard() {
         </s-section>
       )}
 
-      {scanResult && findings.length > 0 && (
+      {scanResult && findings.length > 0 && !scanRunning && (
         <s-section heading="Review scan results" padding="none">
-          <s-table {...(isScanning ? { loading: true } : {})}>
+          <s-table>
             <s-table-header-row>
               <s-table-header>
                 <s-checkbox
@@ -483,16 +617,27 @@ export default function StoreSweepDashboard() {
                     </s-table-cell>
                     <s-table-cell>
                       <s-stack direction="block" gap="tight">
-                        <s-paragraph>{finding.appName}</s-paragraph>
+                        <s-paragraph>
+                          {finding.appName}
+                          {finding.isNew ? " — NEW" : ""}
+                        </s-paragraph>
                         <s-paragraph>
                           {confidenceLabel(finding.confidence)}
                         </s-paragraph>
-                        <s-button
-                          disabled={isBusy}
-                          onClick={() => ignoreFinding(finding)}
-                        >
-                          Keep this code
-                        </s-button>
+                        <s-stack direction="inline" gap="tight">
+                          <s-button
+                            disabled={isBusy}
+                            onClick={() => ignoreFinding(finding)}
+                          >
+                            Keep this code
+                          </s-button>
+                          <s-button
+                            disabled={isBusy}
+                            onClick={() => ignoreApp(finding.appName)}
+                          >
+                            Keep this app
+                          </s-button>
+                        </s-stack>
                       </s-stack>
                     </s-table-cell>
                     <s-table-cell>
@@ -574,27 +719,35 @@ export default function StoreSweepDashboard() {
         </s-section>
       )}
 
-      {ignoredFindings.length > 0 && (
+      {(ignoredFindings.length > 0 || ignoredApps.length > 0) && (
         <s-section
-          heading={`Ignored findings (${ignoredFindings.length})`}
+          heading={`Ignore list (${ignoredFindings.length + ignoredApps.length})`}
           padding="none"
         >
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">App or block</s-table-header>
+              <s-table-header listSlot="primary">Ignored</s-table-header>
               <s-table-header listSlot="inline">File</s-table-header>
               <s-table-header listSlot="secondary"> </s-table-header>
             </s-table-header-row>
             <s-table-body>
+              {ignoredApps.map((record) => (
+                <s-table-row key={record.id}>
+                  <s-table-cell>{record.appName} (all files)</s-table-cell>
+                  <s-table-cell>Every file</s-table-cell>
+                  <s-table-cell>
+                    <s-button disabled={isBusy} onClick={() => unignore(record)}>
+                      Stop ignoring
+                    </s-button>
+                  </s-table-cell>
+                </s-table-row>
+              ))}
               {ignoredFindings.map((record) => (
                 <s-table-row key={record.id}>
                   <s-table-cell>{record.appName}</s-table-cell>
                   <s-table-cell>{record.filename}</s-table-cell>
                   <s-table-cell>
-                    <s-button
-                      disabled={isBusy}
-                      onClick={() => unignoreFinding(record)}
-                    >
+                    <s-button disabled={isBusy} onClick={() => unignore(record)}>
                       Stop ignoring
                     </s-button>
                   </s-table-cell>

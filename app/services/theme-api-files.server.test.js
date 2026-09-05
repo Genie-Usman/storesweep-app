@@ -122,3 +122,49 @@ test("getMainTheme returns the published theme name", async () => {
   const theme = await getMainTheme(admin);
   assert.equal(theme.name, "Dawn");
 });
+
+test("lists every theme with the published theme first", async () => {
+  const { getThemes } = await import("./theme-api.server.js");
+  const admin = {
+    graphql: async () =>
+      graphqlResponse({
+        themes: {
+          nodes: [
+            { id: "t2", name: "Venture", role: "UNPUBLISHED" },
+            { id: "t1", name: "Dawn", role: "MAIN" },
+          ],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      }),
+  };
+
+  const themes = await getThemes(admin);
+  assert.deepEqual(
+    themes.map((theme) => theme.id),
+    ["t1", "t2"],
+  );
+});
+
+test("fetches a single theme by id", async () => {
+  const { getTheme } = await import("./theme-api.server.js");
+  const admin = {
+    graphql: async (_query, options) => {
+      assert.equal(options.variables.themeId, "t9");
+      return graphqlResponse({
+        theme: { id: "t9", name: "Draft", role: "UNPUBLISHED" },
+      });
+    },
+  };
+
+  const theme = await getTheme(admin, "t9");
+  assert.equal(theme.name, "Draft");
+});
+
+test("throws when the theme no longer exists", async () => {
+  const { getTheme } = await import("./theme-api.server.js");
+  const admin = {
+    graphql: async () => graphqlResponse({ theme: null }),
+  };
+
+  await assert.rejects(getTheme(admin, "gone"), /no longer exists/);
+});

@@ -1,4 +1,4 @@
-import { getMainTheme, getThemeTextFile, writeThemeFile } from "./theme-api.server.js";
+import { getMainTheme, getTheme, getThemeTextFile, writeThemeFile } from "./theme-api.server.js";
 import { waitForShopifyJob } from "./shopify-job.server.js";
 import { recordAudit } from "./audit.server.js";
 import { logger } from "../utils/logger.server.js";
@@ -42,7 +42,11 @@ export async function runRestore({ admin, db, shop, cleanOperationId }) {
     detail: { cleanId: operation.id, fileCount: backups.length },
   });
 
-  const theme = await getMainTheme(admin);
+  // Target the theme the run actually modified, even if the shop has
+  // since published a different one.
+  const theme = operation.themeId
+    ? await getTheme(admin, operation.themeId)
+    : await getMainTheme(admin);
   const restoredFiles = [];
 
   for (const { originalFilename, backupFilename } of backups) {

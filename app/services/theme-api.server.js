@@ -155,6 +155,79 @@ export async function getMainTheme(admin) {
   return theme;
 }
 
+/** Every theme on the store (published first), for the scan-scope picker. */
+export async function getThemes(admin, { pageSize = 50 } = {}) {
+  const themes = [];
+  let after = null;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const data = await getGraphqlData(
+      await graphqlWithRetry(
+        admin,
+        `#graphql
+          query StoreSweepThemes($first: Int!, $after: String) {
+            themes(first: $first, after: $after) {
+              nodes {
+                id
+                name
+                role
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        `,
+        { variables: { first: pageSize, after } },
+      ),
+      "Listing themes",
+    );
+
+    for (const theme of data.themes?.nodes || []) {
+      themes.push({ id: theme.id, name: theme.name, role: theme.role });
+    }
+
+    hasNextPage = Boolean(data.themes?.pageInfo?.hasNextPage);
+    after = data.themes?.pageInfo?.endCursor ?? null;
+  }
+
+  return themes.sort((left, right) =>
+    left.role === right.role
+      ? left.name.localeCompare(right.name)
+      : left.role === "MAIN"
+        ? -1
+        : 1,
+  );
+}
+
+/** One theme by ID; throws when it no longer exists. */
+export async function getTheme(admin, themeId) {
+  const data = await getGraphqlData(
+    await graphqlWithRetry(
+      admin,
+      `#graphql
+        query StoreSweepTheme($themeId: ID!) {
+          theme(id: $themeId) {
+            id
+            name
+            role
+          }
+        }
+      `,
+      { variables: { themeId } },
+    ),
+    "Fetching the theme",
+  );
+
+  if (!data.theme?.id) {
+    throw new Error("That theme no longer exists on this store.");
+  }
+
+  return data.theme;
+}
+
 /**
  * Fetch one theme file's text content. Returns null when the file does not
  * exist or is not stored as text.

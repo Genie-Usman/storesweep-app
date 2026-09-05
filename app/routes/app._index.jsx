@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useLoaderData, useRevalidator } from "react-router";
+import {
+  useFetcher,
+  useLoaderData,
+  useRevalidator,
+  useRouteError,
+} from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -757,6 +762,37 @@ export default function StoreSweepDashboard() {
           </s-table>
         </s-section>
       )}
+    </s-page>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+
+  // Let Shopify's boundary handle thrown auth/OAuth responses (re-auth
+  // redirects) and anything unexpected; render a recoverable page for
+  // ordinary request errors.
+  if (!error || (typeof error === "object" && "status" in error && error.status >= 500)) {
+    return boundary.error(error);
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "statusText" in error
+        ? `${error.status} ${error.statusText}`
+        : "Something went wrong.";
+
+  return (
+    <s-page heading="StoreSweep">
+      <s-banner heading="StoreSweep hit an unexpected error" tone="critical">
+        <s-paragraph>{message}</s-paragraph>
+        <s-paragraph>
+          Try the action again. If it keeps happening, rescan the theme to
+          refresh StoreSweep&apos;s view of your store.
+        </s-paragraph>
+      </s-banner>
+      <s-link href="/app">Back to the dashboard</s-link>
     </s-page>
   );
 }

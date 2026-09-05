@@ -176,3 +176,8 @@ Allow `SHOP_REDACT` webhook to process without admin context
 ## v2024.07.16
 
 Started tracking changes and releases using calver
+
+### Fix
+- GDPR compliance webhooks now subscribe via `compliance_topics` in
+  shopify.app.toml (regular topic entries are rejected by the CLI) with a
+  single `/webhooks/compliance` handler dispatching by topic

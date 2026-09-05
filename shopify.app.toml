@@ -24,17 +24,11 @@ api_version = "2026-07"
   uri = "/webhooks/themes/publish"
   topics = [ "themes/publish" ]
 
+  # Mandatory privacy-law compliance topics use compliance_topics, not
+  # topics — regular subscription entries reject them as invalid.
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
-  topics = [ "customers/data_request" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
-  topics = [ "customers/redact" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
-  topics = [ "shop/redact" ]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]

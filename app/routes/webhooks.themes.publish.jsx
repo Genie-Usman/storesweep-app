@@ -6,7 +6,7 @@ import { logger } from "../utils/logger.server";
 // A newly published theme invalidates previous scan results. Record the
 // publish time so the dashboard can flag scans taken before it.
 export const action = async ({ request }) => {
-  const { shop, topic, payload } = await authenticate.webhook(request);
+  const { shop, topic } = await authenticate.webhook(request);
 
   logger.info("webhook received", { shop, topic });
 

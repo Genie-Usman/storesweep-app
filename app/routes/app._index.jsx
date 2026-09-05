@@ -169,7 +169,9 @@ export default function StoreSweepDashboard() {
   const [writeAccessRequired, setWriteAccessRequired] = useState(null);
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const pollThemeRef = useRef(selectedThemeId);
-  const scanAnnouncedRef = useRef(false);
+  // startedAt of the job we already began polling for; guards against the
+  // start/poll effects re-triggering each other in a loop.
+  const handledScanRef = useRef(null);
 
   const scanStarting = startFetcher.state !== "idle";
   const scanJob = pollFetcher.data?.jobKey ? pollFetcher.data : null;
@@ -205,25 +207,23 @@ export default function StoreSweepDashboard() {
       loaderData.lastScan.createdAtISO < lastThemePublishAt,
   );
 
-  // Start polling as soon as a scan job has been accepted.
+  // Start polling exactly once per started scan job.
   useEffect(() => {
-    if (!startFetcher.data) return;
+    const data = startFetcher.data;
+    if (!data) return;
 
-    if (startFetcher.data.success) {
-      if (!scanAnnouncedRef.current) {
-        scanAnnouncedRef.current = true;
-        pollThemeRef.current = startFetcher.data.themeId;
-        pollFetcher.load(
-          `/api/theme/scan?themeId=${encodeURIComponent(startFetcher.data.themeId || "")}`,
-        );
-      }
-    } else {
-      scanAnnouncedRef.current = false;
-      setErrorMessage(startFetcher.data.error || "The theme scan failed.");
+    if (data.success && data.startedAt && data.startedAt !== handledScanRef.current) {
+      handledScanRef.current = data.startedAt;
+      pollThemeRef.current = data.themeId;
+      pollFetcher.load(
+        `/api/theme/scan?themeId=${encodeURIComponent(data.themeId || "")}`,
+      );
+    } else if (!data.success) {
+      setErrorMessage(data.error || "The theme scan failed.");
     }
   }, [startFetcher.data, pollFetcher]);
 
-  // Poll until the background job resolves, then adopt its result.
+  // Poll until the background job resolves, then adopt its result once.
   useEffect(() => {
     const data = pollFetcher.data;
     if (!data || !data.jobKey) return undefined;
@@ -239,7 +239,6 @@ export default function StoreSweepDashboard() {
       return () => clearTimeout(timer);
     }
 
-    scanAnnouncedRef.current = false;
     if (data.status === "completed" && data.result) {
       setScanResult(data.result);
       setSelectedIds(new Set());
@@ -249,7 +248,7 @@ export default function StoreSweepDashboard() {
       setErrorMessage(data.error || "The theme scan failed.");
     }
     return undefined;
-  }, [pollFetcher.data, pollFetcher, revalidator]);
+  }, [pollFetcher.data, revalidator]);
 
   useEffect(() => {
     if (!cleanFetcher.data) return;
@@ -310,7 +309,6 @@ export default function StoreSweepDashboard() {
   const startScan = (themeId) => {
     setSelectedThemeId(themeId);
     setErrorMessage("");
-    scanAnnouncedRef.current = false;
     startFetcher.submit(
       { themeId },
       { method: "POST", action: "/api/theme/scan", encType: "application/json" },

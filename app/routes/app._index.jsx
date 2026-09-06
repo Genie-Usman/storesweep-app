@@ -489,24 +489,34 @@ export default function StoreSweepDashboard() {
           </s-text>
           <s-stack direction="inline" gap="base" alignItems="end">
             {themes.length > 0 && (
-              <s-select
-                label="Theme"
-                value={selectedThemeId || ""}
-                disabled={isBusy}
-                onChange={(event) =>
-                  setSelectedThemeId(event.currentTarget.value)
-                }
-              >
-                {themes.map((theme) => (
-                  <s-option
-                    key={theme.id}
-                    value={theme.id}
-                  >
-                    {theme.name}
-                    {theme.role === "MAIN" ? " (live)" : ""}
-                  </s-option>
-                ))}
-              </s-select>
+              <s-press-button variant="secondary">
+                {themes.find((theme) => theme.id === selectedThemeId)?.name ||
+                  "Choose a theme"}
+                {mainTheme && selectedThemeId === mainTheme.id
+                  ? " (live)"
+                  : ""}
+                <s-popover inline-size="300">
+                  <s-box padding="base">
+                    <s-choice-list
+                      label="Theme"
+                      labelAccessibilityVisibility="exclusive"
+                      values={[selectedThemeId]}
+                      onChange={(event) => {
+                        const next = event.currentTarget.values;
+                        const value = Array.isArray(next) ? next[0] : next;
+                        if (value) setSelectedThemeId(value);
+                      }}
+                    >
+                      {themes.map((theme) => (
+                        <s-choice key={theme.id} value={theme.id}>
+                          {theme.name}
+                          {theme.role === "MAIN" ? " (live)" : ""}
+                        </s-choice>
+                      ))}
+                    </s-choice-list>
+                  </s-box>
+                </s-popover>
+              </s-press-button>
             )}
             <s-button
               variant="primary"

@@ -678,7 +678,7 @@ export default function StoreSweepDashboard() {
                     fileFindings.map((finding) => {
                       const badge = confidenceBadge(finding.confidence);
                       return (
-                        <s-table-row key={finding.id}>
+                  <s-table-row key={finding.id}>
                     <s-table-cell>
                       <s-checkbox
                         label={`Select ${finding.appName}`}
@@ -697,9 +697,30 @@ export default function StoreSweepDashboard() {
                       <s-stack direction="block" gap="tight">
                         <s-stack direction="inline" gap="tight" alignItems="center">
                           <s-text type="strong">{finding.appName}</s-text>
-                          {finding.isNew && <s-badge tone="warning">New</s-badge>}
+                          {finding.isNew && (
+                            <s-badge tone="warning">New</s-badge>
+                          )}
                         </s-stack>
-                        <s-badge tone={badge.tone}>{badge.label}</s-badge>
+                        <s-text color="subdued">{badge.label}</s-text>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="tight">
+                        <s-text type="strong">{filename}</s-text>
+                        <s-text color="subdued">
+                          {lineLabel(finding.lineNumbers)}
+                        </s-text>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="tight">
+                        <s-box
+                          padding="small"
+                          borderRadius="base"
+                          background="subdued"
+                        >
+                          <code>{codeSnippet(finding.matchedCode)}</code>
+                        </s-box>
                         <s-stack direction="inline" gap="tight">
                           <s-button
                             disabled={isBusy}
@@ -715,23 +736,6 @@ export default function StoreSweepDashboard() {
                           </s-button>
                         </s-stack>
                       </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="tight">
-                        <s-text type="strong">{filename}</s-text>
-                        <s-text color="subdued">
-                          {lineLabel(finding.lineNumbers)}
-                        </s-text>
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-box
-                        padding="small"
-                        borderRadius="base"
-                        background="subdued"
-                      >
-                        <code>{codeSnippet(finding.matchedCode)}</code>
-                      </s-box>
                     </s-table-cell>
                   </s-table-row>
                       );

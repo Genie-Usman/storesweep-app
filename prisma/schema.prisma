@@ -62,6 +62,8 @@ model Scan {
   status       String   @default("completed") // completed | failed
   fileCount    Int      @default(0)
   findingCount Int      @default(0)
+  /// Matches hidden by the shop's ignore list during this scan.
+  ignoredCount Int      @default(0)
   durationMs   Int?
   /// JSON map of filename -> sha256 checksum captured at scan time; used to
   /// detect theme drift between a scan and a later cleaning run.

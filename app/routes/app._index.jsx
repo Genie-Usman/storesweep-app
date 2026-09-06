@@ -656,6 +656,7 @@ export default function StoreSweepDashboard() {
                   <s-table-header>
                     <s-checkbox
                       label="Select all"
+                      labelAccessibilityVisibility="exclusive"
                       checked={allSelected}
                       indeterminate={someSelected}
                       disabled={isBusy}
@@ -667,7 +668,6 @@ export default function StoreSweepDashboard() {
                   <s-table-header listSlot="primary">
                     App or block
                   </s-table-header>
-                  <s-table-header listSlot="inline">Location</s-table-header>
                   <s-table-header listSlot="secondary">
                     Code preview
                   </s-table-header>
@@ -702,13 +702,8 @@ export default function StoreSweepDashboard() {
                           )}
                         </s-stack>
                         <s-text color="subdued">{badge.label}</s-text>
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="tight">
-                        <s-text type="strong">{filename}</s-text>
                         <s-text color="subdued">
-                          {lineLabel(finding.lineNumbers)}
+                          {filename} · {lineLabel(finding.lineNumbers)}
                         </s-text>
                       </s-stack>
                     </s-table-cell>

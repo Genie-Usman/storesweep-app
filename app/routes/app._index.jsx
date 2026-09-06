@@ -679,66 +679,61 @@ export default function StoreSweepDashboard() {
                       const badge = confidenceBadge(finding.confidence);
                       return (
                         <s-table-row key={finding.id}>
-                          <s-table-cell>
-                            <s-checkbox
-                              label={`Select ${finding.appName}`}
-                              checked={selectedIds.has(finding.id)}
-                              disabled={isBusy}
-                              onChange={(event) =>
-                                toggleFinding(
-                                  finding.id,
-                                  event.currentTarget.checked,
-                                )
-                              }
-                            />
-                          </s-table-cell>
-                          <s-table-cell>
-                            <s-stack direction="block" gap="tight">
-                              <s-stack direction="inline" gap="tight">
-                                <s-text type="strong">
-                                  {finding.appName}
-                                </s-text>
-                                {finding.isNew && (
-                                  <s-badge tone="warning">New</s-badge>
-                                )}
-                              </s-stack>
-                              <s-badge tone={badge.tone}>
-                                {badge.label}
-                              </s-badge>
-                              <s-stack direction="inline" gap="tight">
-                                <s-button
-                                  disabled={isBusy}
-                                  onClick={() => ignoreFinding(finding)}
-                                >
-                                  Keep this code
-                                </s-button>
-                                <s-button
-                                  disabled={isBusy}
-                                  onClick={() => ignoreApp(finding.appName)}
-                                >
-                                  Keep this app
-                                </s-button>
-                              </s-stack>
-                            </s-stack>
-                          </s-table-cell>
-                          <s-table-cell>
-                            <s-stack direction="block" gap="tight">
-                              <s-text type="strong">{filename}</s-text>
-                              <s-text color="subdued">
-                                {lineLabel(finding.lineNumbers)}
-                              </s-text>
-                            </s-stack>
-                          </s-table-cell>
-                          <s-table-cell>
-                            <s-box
-                              padding="small"
-                              borderRadius="base"
-                              background="subdued"
-                            >
-                              <code>{codeSnippet(finding.matchedCode)}</code>
-                            </s-box>
-                          </s-table-cell>
-                        </s-table-row>
+                    <s-table-cell>
+                      <s-checkbox
+                        label={`Select ${finding.appName}`}
+                        labelAccessibilityVisibility="exclusive"
+                        checked={selectedIds.has(finding.id)}
+                        disabled={isBusy}
+                        onChange={(event) =>
+                          toggleFinding(
+                            finding.id,
+                            event.currentTarget.checked,
+                          )
+                        }
+                      />
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="tight">
+                        <s-stack direction="inline" gap="tight" alignItems="center">
+                          <s-text type="strong">{finding.appName}</s-text>
+                          {finding.isNew && <s-badge tone="warning">New</s-badge>}
+                        </s-stack>
+                        <s-badge tone={badge.tone}>{badge.label}</s-badge>
+                        <s-stack direction="inline" gap="tight">
+                          <s-button
+                            disabled={isBusy}
+                            onClick={() => ignoreFinding(finding)}
+                          >
+                            Keep code
+                          </s-button>
+                          <s-button
+                            disabled={isBusy}
+                            onClick={() => ignoreApp(finding.appName)}
+                          >
+                            Keep app
+                          </s-button>
+                        </s-stack>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="tight">
+                        <s-text type="strong">{filename}</s-text>
+                        <s-text color="subdued">
+                          {lineLabel(finding.lineNumbers)}
+                        </s-text>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-box
+                        padding="small"
+                        borderRadius="base"
+                        background="subdued"
+                      >
+                        <code>{codeSnippet(finding.matchedCode)}</code>
+                      </s-box>
+                    </s-table-cell>
+                  </s-table-row>
                       );
                     }),
                   )}

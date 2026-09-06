@@ -43,6 +43,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 ### Local development
 
+> After pulling changes that touch the Prisma schema, run > and **restart**  — a running dev server keeps the
+> previously generated Prisma client in memory and will fail writes with
+> confusing errors until restarted.
+
 ```shell
 npm install
 npm run setup   # prisma generate + migrate deploy (SQLite)

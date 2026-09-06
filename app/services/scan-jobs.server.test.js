@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   getScanJob,
+  humanizeScanError,
   resetScanJobs,
   startScanJob,
 } from "./scan-jobs.server.js";
@@ -184,6 +185,19 @@ test("surfaces scan failures on the job", async () => {
   assert.equal(finished.status, "failed");
   assert.equal(finished.error, "boom");
   assert.equal(finished.result, null);
+});
+
+test("sanitizes database errors before they reach the browser", () => {
+  const raw =
+    "Invalid `prisma.scan.create()` invocation: { data: { shop: \"x\" } }";
+  assert.match(
+    humanizeScanError(new Error(raw)),
+    /could not save the scan results/,
+  );
+  assert.equal(
+    humanizeScanError(new Error("No published theme was found for this store.")),
+    "No published theme was found for this store.",
+  );
 });
 
 test("returns null for shops with no tracked job", () => {

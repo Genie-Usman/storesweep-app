@@ -19,6 +19,21 @@ const jobs = new Map();
 
 const jobKey = (shop, themeId) => `${shop}:${themeId || "main"}`;
 
+/**
+ * Scan failures can carry raw internals (Prisma invocations, checksum
+ * dumps, shop domains). The job's error is rendered in the merchant's
+ * browser, so only a safe message travels; the full error stays in logs.
+ */
+export function humanizeScanError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes("Invalid `prisma") || message.includes("invocation:")) {
+    return "StoreSweep could not save the scan results. Try again — if this keeps happening, restart the app dev server or contact the developer.";
+  }
+
+  return message;
+}
+
 function snapshot(job) {
   return {
     jobKey: job.key,
@@ -96,8 +111,7 @@ export function startScanJob({
     })
     .catch((error) => {
       job.status = "failed";
-      job.error =
-        error instanceof Error ? error.message : "The theme scan failed.";
+      job.error = humanizeScanError(error);
       logger.error("background scan failed", { shop, themeId, error });
     })
     .finally(() => {

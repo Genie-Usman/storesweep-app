@@ -68,6 +68,7 @@ export const loader = async ({ request }) => {
             createdAtLabel: `${dateFormatter.format(lastScan.createdAt)} UTC`,
             fileCount: lastScan.fileCount,
             findingCount: lastScan.findingCount,
+            ignoredCount: lastScan.ignoredCount,
             fileChecksums: JSON.parse(lastScan.fileChecksums || "{}"),
             findings: lastScan.findings.map((finding) => ({
               id: finding.findingKey,
@@ -178,7 +179,7 @@ export default function StoreSweepDashboard() {
           createdAtLabel: loaderData.lastScan.createdAtLabel,
           fileCount: loaderData.lastScan.fileCount,
           findingCount: loaderData.lastScan.findingCount,
-          ignoredCount: 0,
+          ignoredCount: loaderData.lastScan.ignoredCount,
           newCount: 0,
           fileChecksums: loaderData.lastScan.fileChecksums,
           findings: loaderData.lastScan.findings,

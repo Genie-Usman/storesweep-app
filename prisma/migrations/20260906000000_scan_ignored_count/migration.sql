@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Scan" ADD COLUMN "ignoredCount" INTEGER NOT NULL DEFAULT 0;

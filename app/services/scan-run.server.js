@@ -134,6 +134,7 @@ export async function runScan({
       status: "completed",
       fileCount: files.length,
       findingCount: findings.length,
+      ignoredCount,
       durationMs,
       fileChecksums: JSON.stringify(fileChecksums),
       findings: {

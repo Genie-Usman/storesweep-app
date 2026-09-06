@@ -128,7 +128,9 @@ export async function runScan({
 
   const scanRecord = await db.scan.create({
     data: {
-      shop,
+      // A create with nested writes (findings) requires the relation form;
+      // the scalar shop foreign key is rejected in that combination.
+      shopRef: { connect: { shop } },
       themeId: theme.id,
       themeName: theme.name ?? null,
       status: "completed",

@@ -504,14 +504,19 @@ export default function StoreSweepDashboard() {
                   {theme.role === "MAIN" ? " (live)" : ""}
                 </s-button>
               ))}
-            <s-button
-              variant="primary"
-              onClick={() => startScan(selectedThemeId)}
-              disabled={scanRunning}
-              {...(scanStarting ? { loading: true } : {})}
-            >
-              Scan theme
-            </s-button>
+          {scanResult &&
+            !scanRunning &&
+            selectedThemeId &&
+            scanResult.themeId !== selectedThemeId && (
+              <s-text color="subdued">
+                Showing results for{" "}
+                {scanResult.themeName || "the previous theme"}. Press Scan
+                theme to check{" "}
+                {themes.find((theme) => theme.id === selectedThemeId)?.name ||
+                  "the selected theme"}
+                .
+              </s-text>
+            )}
           </s-stack>
         </s-stack>
       </s-section>

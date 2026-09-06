@@ -11,6 +11,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getSubscriptionStatus } from "../services/billing.server";
+import { logger } from "../utils/logger.server";
 import { getThemes } from "../services/theme-api.server";
 
 const POLL_INTERVAL_MS = 1500;
@@ -52,7 +53,10 @@ export const loader = async ({ request }) => {
         where: { shop },
         select: { lastThemePublishAt: true },
       }),
-      getThemes(admin).catch(() => []),
+      getThemes(admin).catch((error) => {
+        logger.error("theme list failed", { shop, error });
+        return [];
+      }),
       getSubscriptionStatus(billing),
     ]);
 
@@ -488,23 +492,18 @@ export default function StoreSweepDashboard() {
             store.
           </s-text>
           <s-stack direction="inline" gap="base" alignItems="end">
-            {themes.length > 0 && (
-              <s-button-group accessibilityLabel="Theme picker" gap="tight">
-                {themes.map((theme) => (
-                  <s-button
-                    key={theme.id}
-                    variant={
-                      theme.id === selectedThemeId ? "primary" : "secondary"
-                    }
-                    disabled={isBusy}
-                    onClick={() => setSelectedThemeId(theme.id)}
-                  >
-                    {theme.name}
-                    {theme.role === "MAIN" ? " (live)" : ""}
-                  </s-button>
-                ))}
-              </s-button-group>
-            )}
+            {themes.length > 0 &&
+              themes.map((theme) => (
+                <s-button
+                  key={theme.id}
+                  variant={theme.id === selectedThemeId ? "primary" : "secondary"}
+                  disabled={isBusy}
+                  onClick={() => setSelectedThemeId(theme.id)}
+                >
+                  {theme.name}
+                  {theme.role === "MAIN" ? " (live)" : ""}
+                </s-button>
+              ))}
             <s-button
               variant="primary"
               onClick={() => startScan(selectedThemeId)}

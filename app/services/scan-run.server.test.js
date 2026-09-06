@@ -94,7 +94,10 @@ test("persists a scan and returns client-safe results", async () => {
   assert.ok(result.fileChecksums["templates/product.json"]);
   assert.equal("themeContent" in result, false);
 
-  assert.equal(db.created.scan.shop, "shop.example");
+  assert.deepEqual(
+    db.created.scan.shopRef,
+    { connect: { shop: "shop.example" } },
+  );
   assert.equal(db.created.scan.findingCount, 2);
   assert.equal(db.created.scan.findings.create.length, 2);
   assert.equal(db.created.scan.findings.create[0].findingKey.startsWith("finding:"), true);

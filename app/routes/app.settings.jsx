@@ -4,6 +4,14 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
+const shortFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "UTC",
+});
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -78,9 +86,9 @@ export const loader = async ({ request }) => {
       firstSeenLabel: shopRecord
         ? `${dateFormatter.format(shopRecord.firstSeenAt)} UTC`
         : null,
-      lastScanLabel:
+      lastScanShort:
         shopRecord && shopRecord.lastScanAt
-          ? `${dateFormatter.format(shopRecord.lastScanAt)} UTC`
+          ? `${shortFormatter.format(shopRecord.lastScanAt)} UTC`
           : null,
     },
     auditEvents: auditEvents.map((event) => ({
@@ -100,9 +108,9 @@ export default function StoreSweepSettings() {
         <s-stack direction="block" gap="base">
           <s-text type="strong">{shop}</s-text>
           <s-grid gridTemplateColumns="repeat(3, 1fr)" gap="base">
-            {statCard(String(stats.scanCount), "Scans run")}
-            {statCard(String(stats.cleanCount), "Cleaning runs")}
-            {statCard(stats.lastScanLabel || "—", "Last scan")}
+            {statCard(String(stats.scanCount), stats.scanCount === 1 ? "Scan run" : "Scans run")}
+            {statCard(String(stats.cleanCount), stats.cleanCount === 1 ? "Cleaning run" : "Cleaning runs")}
+            {statCard(stats.lastScanShort || "—", "Last scan")}
           </s-grid>
           {stats.firstSeenLabel && (
             <s-text color="subdued">
@@ -147,7 +155,7 @@ export default function StoreSweepSettings() {
 
       <s-section
         heading={`Audit trail (latest ${auditEvents.length})`}
-        padding={auditEvents.length === 0 ? undefined : "none"}
+        
       >
         {auditEvents.length === 0 ? (
           <s-text color="subdued">

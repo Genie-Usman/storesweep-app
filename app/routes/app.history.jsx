@@ -120,7 +120,7 @@ export default function StoreSweepHistory() {
     <s-page heading="History">
       <s-section
         heading={`Scans (${scans.length})`}
-        padding={scans.length === 0 ? undefined : "none"}
+        
       >
         {scans.length === 0 ? (
           <s-text color="subdued">
@@ -138,27 +138,21 @@ export default function StoreSweepHistory() {
               {scans.map((scan) => (
                 <s-table-row key={scan.id}>
                   <s-table-cell>
-                    <s-text type="strong">{scan.createdAtLabel}</s-text>
+                    <s-stack direction="block" gap="tight">
+          <s-text type="strong">{scan.createdAtLabel}</s-text>
+          {scan.durationSeconds !== null && (
+            <s-text color="subdued">took {scan.durationSeconds}s</s-text>
+          )}
+        </s-stack>
                   </s-table-cell>
                   <s-table-cell>{scan.themeName}</s-table-cell>
                   <s-table-cell>{scan.fileCount}</s-table-cell>
                   <s-table-cell>
-                    <s-stack direction="inline" gap="tight" alignItems="center">
                       {scan.findingCount > 0 ? (
-                        <s-badge
-                          tone={scan.findingCount > 0 ? "warning" : "success"}
-                        >
-                          {scan.findingCount}
-                        </s-badge>
+                        <s-badge tone="warning">{scan.findingCount} found</s-badge>
                       ) : (
                         <s-badge tone="success">Clear</s-badge>
                       )}
-                      {scan.durationSeconds !== null && (
-                        <s-text color="subdued">
-                          in {scan.durationSeconds}s
-                        </s-text>
-                      )}
-                    </s-stack>
                   </s-table-cell>
                 </s-table-row>
               ))}
@@ -169,7 +163,7 @@ export default function StoreSweepHistory() {
 
       <s-section
         heading={`Cleaning runs (${cleanOperations.length})`}
-        padding={cleanOperations.length === 0 ? undefined : "none"}
+        
       >
         {cleanOperations.length === 0 ? (
           <s-text color="subdued">

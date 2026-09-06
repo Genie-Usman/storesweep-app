@@ -635,7 +635,7 @@ export default function StoreSweepDashboard() {
           </s-section>
 
           {findings.length > 0 && (
-            <s-section heading="Review findings" padding="none">
+            <s-section heading="Review findings">
               <s-table>
                 <s-table-header-row>
                   <s-table-header>
@@ -789,7 +789,7 @@ export default function StoreSweepDashboard() {
       )}
 
       {totalIgnored > 0 && (
-        <s-section heading={`Ignore list (${totalIgnored})`} padding="none">
+        <s-section heading={`Ignore list (${totalIgnored})`}>
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">App or block</s-table-header>

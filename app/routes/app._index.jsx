@@ -501,7 +501,6 @@ export default function StoreSweepDashboard() {
                   <s-option
                     key={theme.id}
                     value={theme.id}
-                    selected={theme.id === selectedThemeId}
                   >
                     {theme.name}
                     {theme.role === "MAIN" ? " (live)" : ""}

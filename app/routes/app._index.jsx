@@ -480,30 +480,44 @@ export default function StoreSweepDashboard() {
         Scan theme
       </s-button>
 
-      <s-section heading="Scan scope">
+      <s-section heading="Scan your theme">
         <s-stack direction="block" gap="base">
           <s-text color="subdued">
             StoreSweep checks every text file in the selected theme for code
             left behind by uninstalled apps. Scanning never changes your
             store.
           </s-text>
-          {themes.length > 0 && (
-            <s-stack direction="inline" gap="tight" flexWrap="wrap">
-              {themes.map((theme) => (
-                <s-button
-                  key={theme.id}
-                  variant={
-                    theme.id === selectedThemeId ? "primary" : "secondary"
-                  }
-                  disabled={isBusy}
-                  onClick={() => startScan(theme.id)}
-                >
-                  {theme.name}
-                  {theme.role === "MAIN" ? " (live)" : ""}
-                </s-button>
-              ))}
-            </s-stack>
-          )}
+          <s-stack direction="inline" gap="base" alignItems="end">
+            {themes.length > 0 && (
+              <s-select
+                label="Theme"
+                value={selectedThemeId || ""}
+                disabled={isBusy}
+                onChange={(event) =>
+                  setSelectedThemeId(event.currentTarget.value)
+                }
+              >
+                {themes.map((theme) => (
+                  <s-option
+                    key={theme.id}
+                    value={theme.id}
+                    selected={theme.id === selectedThemeId}
+                  >
+                    {theme.name}
+                    {theme.role === "MAIN" ? " (live)" : ""}
+                  </s-option>
+                ))}
+              </s-select>
+            )}
+            <s-button
+              variant="primary"
+              onClick={() => startScan(selectedThemeId)}
+              disabled={scanRunning}
+              {...(scanStarting ? { loading: true } : {})}
+            >
+              Scan theme
+            </s-button>
+          </s-stack>
         </s-stack>
       </s-section>
 
